@@ -25,7 +25,6 @@ ApplicationContainer sinkApps;
 
 // Data rate map: GS -> SAT
 std::map<std::pair<int,int>, double> dataRateMap;
-
 // Task queue: satelliteId -> list of GS IDs
 std::map<int, std::vector<int>> satelliteTaskQueue;
 
@@ -57,7 +56,6 @@ static void EchoRx(std::string context, const Ptr<const Packet> packet,
     int satId = std::stoi(GetNodeId(context));
     if (satId < 0 || satId >= (int)satellites.GetN()) return;
 
-    // Identify GS sending to this satellite
     auto &queue = satelliteTaskQueue[satId];
     int progress = satTaskProgress[satId];
 
@@ -65,14 +63,13 @@ static void EchoRx(std::string context, const Ptr<const Packet> packet,
     uint64_t totalRx = sink->GetTotalRx();
     uint64_t delta = totalRx - satLastRxBytes[satId];
 
-    if (delta >= 125000) {
+    if (delta >= 125000 && progress < (int)queue.size()) {
         satLastRxBytes[satId] = totalRx;
         double now = Simulator::Now().GetSeconds();
 
         int gsId = queue[progress];
         g_gsRxEndTime[gsId] = now;
 
-        // Accumulate time
         double start = g_gsTxStartTime[gsId];
         satTimeAccumulated[satId] += (now - start);
 
@@ -90,7 +87,6 @@ static void EchoRx(std::string context, const Ptr<const Packet> packet,
 }
 
 void SendPacket(int gsId, int satId) {
-    // Compute device indices in utNet: first groundStations, then satellites
     uint32_t gsIndex  = gsId;
     uint32_t satIndex = groundStations.GetN() + satId;
 
@@ -128,7 +124,6 @@ void SendPacket(int gsId, int satId) {
 }
 
 std::string GetNodeId(const std::string &str) {
-    // context: "/NodeList/X/$ns3::Tcp..."
     size_t p1 = str.find('/', 1);
     size_t p2 = str.find('/', p1+1);
     return str.substr(p1+1, p2-p1-1);
@@ -154,21 +149,42 @@ int main(int argc, char *argv[]) {
     cmd.AddValue("outputFile", "Results output file", outputFile);
     cmd.Parse(argc, argv);
 
-    // Defaults
     Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(512));
     Config::SetDefault("ns3::TcpSocketBase::MinRto", TimeValue(Seconds(2.0)));
 
-    // Install satellites and ground stations
+    // Install satellites
     LeoOrbitNodeHelper orbit;
     satellites = orbit.Install({LeoOrbit(1200,20,1,60)});
 
+    // Install ground stations
     LeoGndNodeHelper ground;
-    // Add your GS positions...
-    ground.Add(groundStations, LeoLatLong(20,4));
-    // ... (其他地面站)
-    utNet = LeoChannelHelper(constellation).Install(satellites, groundStations);
+    ground.Add(groundStations, LeoLatLong(20, 4));
+    ground.Add(groundStations, LeoLatLong(19, 12));
+    ground.Add(groundStations, LeoLatLong(19, 10));
+    ground.Add(groundStations, LeoLatLong(19, 19));
+    ground.Add(groundStations, LeoLatLong(19, 20));
+    ground.Add(groundStations, LeoLatLong(18, 20));
+    ground.Add(groundStations, LeoLatLong(18, 22));
+    ground.Add(groundStations, LeoLatLong(17, 26));
+    ground.Add(groundStations, LeoLatLong(18, 30));
+    ground.Add(groundStations, LeoLatLong(15, 40));
+    ground.Add(groundStations, LeoLatLong(14, 25));
+    ground.Add(groundStations, LeoLatLong(14, 30));
+    ground.Add(groundStations, LeoLatLong(14, 40));
+    ground.Add(groundStations, LeoLatLong(14, 50));
+    ground.Add(groundStations, LeoLatLong(14, 52));
+    ground.Add(groundStations, LeoLatLong(13, 50));
+    ground.Add(groundStations, LeoLatLong(13, 48));
+    ground.Add(groundStations, LeoLatLong(12, 50));
+    ground.Add(groundStations, LeoLatLong(13, 52));
+    ground.Add(groundStations, LeoLatLong(15, 30));
 
-    // Install stack & routing
+    // Set up channel and devices
+    LeoChannelHelper utCh;
+    utCh.SetConstellation(constellation);
+    utNet = utCh.Install(satellites, groundStations);
+
+    // Network stack and routing
     AodvHelper aodv; aodv.Set("EnableHello", BooleanValue(false));
     InternetStackHelper stack; stack.SetRoutingHelper(aodv);
     stack.Install(satellites); stack.Install(groundStations);
@@ -178,7 +194,7 @@ int main(int argc, char *argv[]) {
     ipv4.SetBase("10.1.0.0","255.255.0.0");
     ipv4.Assign(utNet);
 
-    // Sink on satellites
+    // Install sinks on satellites
     PacketSinkHelper sinkHelper("ns3::TcpSocketFactory",
                                 InetSocketAddress(Ipv4Address::GetAny(), port));
     for (uint32_t i = 0; i < satellites.GetN(); ++i) {
@@ -188,7 +204,7 @@ int main(int argc, char *argv[]) {
     // Read network.graph
     std::ifstream graphFile("network.graph");
     int numGS, numSat, numLinks;
-    graphFile >> numGS >> numSat >> numLinks;
+    graphFile >> numGS >> numSat >> numLinks;  
     int gsId, satId;
     double rate;
     while (graphFile >> gsId >> satId >> rate) {
@@ -196,21 +212,20 @@ int main(int argc, char *argv[]) {
     }
     graphFile.close();
 
-    // Read assignments & Lab3 times
+    // Read assignments and ignore Lab3 times
     std::ifstream inFile(inputFile);
-    double tmp;
-    inFile >> tmp; // skip Lab3 overall time
+    double lab3Overall;
+    inFile >> lab3Overall;
     for (int i = 0; i < numGS; ++i) {
         inFile >> gsId >> satId;
         satelliteTaskQueue[satId].push_back(gsId);
     }
-    int sid; double t;
-    while (inFile >> sid >> t) {
-        // Lab3 per-sat times ignored
+    while (inFile >> satId >> rate) {
+        // skip per-satellite Lab3 times
     }
     inFile.close();
 
-    // Initialize per-sat data
+    // Initialize per-satellite tracking
     for (int i = 0; i < numSat; ++i) {
         g_isSatelliteIdle[i] = true;
         satTaskProgress[i]    = 0;
@@ -218,7 +233,7 @@ int main(int argc, char *argv[]) {
         satTimeAccumulated[i] = 0.0;
     }
 
-    // Start first tasks
+    // Start initial transmissions
     for (auto &p : satelliteTaskQueue) {
         int s = p.first;
         if (!p.second.empty() && g_isSatelliteIdle[s]) {
@@ -231,7 +246,7 @@ int main(int argc, char *argv[]) {
     Simulator::Run();
     Simulator::Destroy();
 
-    // Write output
+    // Write output file
     std::ofstream outFile(outputFile);
     double maxTime = 0;
     for (auto &p : g_finalSatelliteCollectionTime) {
