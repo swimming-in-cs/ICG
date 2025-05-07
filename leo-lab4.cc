@@ -247,15 +247,15 @@ int main(int argc, char *argv[]) {
   graphFile.close();
 
   // Read input assignments file
-  std::ifstream associationFile(inputFile);
-  if (!associationFile.is_open()) {
+  std::ifstream inFile(inputFile);
+  if (!inFile.is_open()) {
     NS_LOG_ERROR("Cannot open input file: " << inputFile);
     return 1;
   }
 
   bool readLab3TotalTime = false;
   int connectionsReadCount = 0;
-  while (std::getline(associationFile, line)) {
+  while (std::getline(inFile, line)) {
     if (line.empty()) continue;
     std::istringstream lineStream(line);
     if (!readLab3TotalTime) {
@@ -280,7 +280,7 @@ int main(int argc, char *argv[]) {
       g_lab3SatelliteCollectionTimes[satId] = lab3SatCollectionTime;
     }
   }
-  associationFile.close();
+  inFile.close();
 
   // Build satellite task queues from assignments
   for (const auto& assignment : g_gsToSatAssignments) {
@@ -310,53 +310,47 @@ int main(int argc, char *argv[]) {
   Simulator::Destroy();
 
   // Task 4: Output File
-  std::ofstream outputFileStream(outputFile);
-  if (!outputFileStream.is_open()) {
+  std::ofstream outFile(outputFile);
+  if (!outFile.is_open()) {
     NS_LOG_ERROR("Cannot open output file: " << outputFile);
     return 1;
   }
 
-  double overallMaxCollectionDuration = 0.0;
+  double totalMaxCollectionTime = 0.0;
   for (const auto& pair : g_finalSatelliteCollectionTime) {
-    overallMaxCollectionDuration = std::max(overallMaxCollectionDuration, pair.second);
+    totalMaxCollectionTime = std::max(totalMaxCollectionTime, pair.second);
   }
 
-  // Line 1: total_collection_time
-  outputFileStream << overallMaxCollectionDuration << "\n";
-  outputFileStream << "\n"; // Blank line as in user's original output attempt
-
-  // Lines 2+: satellite_id collection_time (accumulated duration)
-  // Output for all satellites defined by numSatellites (from network.graph)
+  outFile << totalMaxCollectionTime << "\n";
+  outFile << "\n"; 
   for (int satId = 0; satId < numSatellites; ++satId) {
     double collectionDuration = g_finalSatelliteCollectionTime.count(satId) ? g_finalSatelliteCollectionTime[satId] : 0.0;
-    outputFileStream << satId << " ";
-    if (collectionDuration == 0.0) { // Specific handling for 0.0 from user's code
-      outputFileStream << "0\n";
+    outFile << satId << " ";
+    if (collectionDuration == 0.0) { 
+      outFile << "0\n";
     } else {
-      outputFileStream << collectionDuration << "\n";
+      outFile << collectionDuration << "\n";
     }
   }
-  outputFileStream << "\n"; // Blank line
+  outFile << "\n"; 
 
-  // Ground station trans_start_time and recept_end_time
-  // Output for all ground stations defined by numGroundStations
   for (int gsId = 0; gsId < numGroundStations; ++gsId) {
     double txStartTime = g_gsTransmissionStartTime.count(gsId) ? g_gsTransmissionStartTime[gsId] : 0.0;
     double rxEndTime = g_gsTransmissionEndTime.count(gsId) ? g_gsTransmissionEndTime[gsId] : 0.0;
-    outputFileStream << gsId << " ";
+    outFile << gsId << " ";
     if (txStartTime == 0.0) {
-      outputFileStream << "0 ";
+      outFile << "0 ";
     } else {
-      outputFileStream << txStartTime << " ";
+      outFile << txStartTime << " ";
     }
     if (rxEndTime == 0.0) {
-      outputFileStream << "0\n";
+      outFile << "0\n";
     } else {
-      outputFileStream << rxEndTime << "\n";
+      outFile << rxEndTime << "\n";
     }
   }
 
-  outputFileStream.close();
+  outFile.close();
   NS_LOG_INFO("Output successfully written to: " << outputFile);
 
   return 0;
