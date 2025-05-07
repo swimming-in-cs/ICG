@@ -1,317 +1,379 @@
 #include <iostream>
+#include <fstream> // Added for file I/O
 #include <algorithm>
+#include <vector>   // Added
+#include <map>      // Added
+#include <set>      // Added
+#include <deque>    // Added
+#include <iomanip>  // Added for std::fixed and std::setprecision
 
 #include "ns3/core-module.h"
 #include "ns3/mobility-module.h"
 #include "ns3/leo-module.h"
 #include "ns3/network-module.h"
+#include "ns3/internet-module.h" // Added for InternetStackHelper
 #include "ns3/aodv-module.h"
-#include "ns3/udp-server.h"
+#include "ns3/applications-module.h" // Added for PacketSinkHelper, BulkSendHelper
 
 using namespace ns3;
+
+NS_LOG_COMPONENT_DEFINE ("Lab4");
 
 // Satellite network setup
 int port = 9;
 NodeContainer satellites;
 NodeContainer groundStations;
-NetDeviceContainer utNet;
-ApplicationContainer sinkApps;
+NetDeviceContainer utNet; // Combined satellite and ground station devices
+// ApplicationContainer sinkApps; // Replaced by individual sink management if needed, or handled by EchoRx directly
 
-std::map<std::pair<int, int>, bool> finished;
-std::map<int, std::set<int>> satToGsMap;
-std::set<int> gsStarted;
-std::set<int> satFinished;
+// === MODIFIED/ADDED Data Structures for State Management ===
+// Maps logical GS/SAT IDs to internal data
+std::map<int, std::deque<int>> gsQueuesForSatellite;       // satId -> deque of pending gsIds (sorted by gsId)
+std::map<int, int> activeGsForSat;                         // satId -> current gsId transmitting, -1 if idle
+std::map<std::pair<int, int>, bool> transmissionCompleted; // {gsId, satId} -> true if this specific transmission is done
 
-std::map<int, std::queue<std::pair<int, int>>> satTaskQueue;
-std::set<int> satBusy;
+// For storing times for output
+std::map<std::pair<int, int>, double> gsTxStartTimes;    // {gsId, satId} -> start time
+std::map<std::pair<int, int>, double> gsRxEndTimes;      // {gsId, satId} -> end time
+std::map<int, double> satelliteActualCollectionTimes; // satId -> time all its GSs finished
+std::map<int, bool> satelliteHasCompletedAllTasks;    // satId -> true if all its GSs are done (to prevent re-logging collection time)
 
-static void EchoRx(std::string context, const Ptr< const Packet > packet, const TcpHeader &header, const Ptr< const TcpSocketBase > socket);
+// To know all assignments for checking satellite completion
+std::map<int, std::set<int>> initialSatToGsAssignments; // satId -> set of all gsIds assigned to it
+
+// Forward declarations
+static void EchoRx(std::string context, const Ptr<const Packet> packet, const TcpHeader &header, const Ptr<const TcpSocketBase> socket);
 void SendPacket(int gsId, int satId);
-string GetNodeId(string str);
-void Connect();
+std::string GetNodeIdFromString(std::string str); // Renamed for clarity
+void ConnectTcpRxCallback(); // Renamed
 
+// Function to get Node ID from context string
+std::string GetNodeIdFromString(std::string str) {
+    size_t pos1 = str.find("/", 0);
+    size_t pos2 = str.find("/", pos1 + 1);
+    size_t pos3 = str.find("/", pos2 + 1);
+    return str.substr(pos2 + 1, pos3 - pos2 - 1);
+}
 
-static void EchoRx(std::string context, const Ptr< const Packet > packet, const TcpHeader &header, const Ptr< const TcpSocketBase > socket){
-  // Task 3: Complete this function
-  int nodeId = std::stoi(GetNodeId(context));
-  int satId = nodeId;
-  if ((uint32_t)satId >= satellites.GetN()) return;
+void SendPacket(int gsId, int satId) {
+    NS_LOG_INFO("Attempting SendPacket for GS " << gsId << " to SAT " << satId << " at " << Simulator::Now().GetSeconds() << "s");
 
-  Ptr<PacketSink> sink = satellites.Get(satId)->GetApplication(0)->GetObject<PacketSink>();
-  if (sink->GetTotalRx() >= 125000) {
-    for (const auto &entry : finished) {
-      int gsId = entry.first.first;
-      int sid = entry.first.second;
-      std::pair<int, int> key = std::make_pair(gsId, sid);
-      
-      if (sid == satId && !finished[key]) {
-        finished[key] = true;
-        
-        std::ofstream log("recv_time.log", std::ios::app);
-        log << "GS " << gsId << " -> SAT " << sid << " finishes at: " << Simulator::Now().GetSeconds() << "s\n";
-        log.close();
-      }
+    // Ensure this satellite is supposed to be talking to this GS now
+    if (!activeGsForSat.count(satId) || activeGsForSat[satId] != gsId) {
+         NS_LOG_WARN("SendPacket called for GS " << gsId << " to SAT " << satId << ", but SAT is expecting GS " << (activeGsForSat.count(satId) ? activeGsForSat[satId] : -1) << ". Aborting this SendPacket.");
+         // This state indicates a logic error in scheduling. The satellite should have been marked busy with this gsId.
+         // For robustness, one might re-queue or error, but ideally, scheduling logic prevents this.
+         return;
     }
 
-    bool allDone = true;
-    for (int gsId : satToGsMap[satId]) {
-      std::pair<int, int> key = std::make_pair(gsId, satId);
-      if (!finished[key]) {
-        allDone = false;
-        break;
-      }
+    Ptr<Node> senderNode = groundStations.Get(gsId);    // Logical GS ID to NS-3 Node
+    Ptr<Node> receiverNode = satellites.Get(satId); // Logical SAT ID to NS-3 Node
+
+    Ipv4Address dstAddr = receiverNode->GetObject<Ipv4>()->GetAddress(1, 0).GetLocal();
+
+    BulkSendHelper bulk("ns3::TcpSocketFactory", InetSocketAddress(dstAddr, port));
+    bulk.SetAttribute("MaxBytes", UintegerValue(125000)); // Total data to send for this GS-SAT pair
+    bulk.SetAttribute("SendSize", UintegerValue(512));   // Packet size
+
+    ApplicationContainer clientApp = bulk.Install(senderNode);
+    clientApp.Start(Simulator::Now()); // Start immediately
+    // MaxBytes will cause it to stop sending. We don't set an explicit stop time for the app here.
+
+    gsTxStartTimes[std::make_pair(gsId, satId)] = Simulator::Now().GetSeconds();
+    NS_LOG_INFO("GS " << gsId << " -> SAT " << satId << " transmission STARTS at: " << gsTxStartTimes[std::make_pair(gsId, satId)] << "s");
+}
+
+static void EchoRx(std::string context, const Ptr<const Packet> packet, const TcpHeader &header, const Ptr<const TcpSocketBase> socket) {
+    uint32_t receivingNodeId = std::stoi(GetNodeIdFromString(context));
+
+    // Check if the receiver is a satellite
+    if (receivingNodeId >= satellites.GetN()) {
+        // NS_LOG_INFO("Packet received by GroundStation " << (receivingNodeId - satellites.GetN()) << ", ignoring in EchoRx satellite logic.");
+        return; // Packet received by a ground station, not relevant for this logic
     }
 
-    if (allDone && satFinished.find(satId) == satFinished.end()) {
-      std::ofstream log("collection_time.log", std::ios::app);
-      log << "SAT " << satId << " collects all data at: " << Simulator::Now().GetSeconds() << "s\n";
-      log.close();
-      satFinished.insert(satId);
+    int satId = receivingNodeId; // This is the logical satellite ID
+
+    // === CRITICAL CHANGE: Identify the sender (gsId) based on which GS is active for this SAT ===
+    if (!activeGsForSat.count(satId) || activeGsForSat[satId] == -1) {
+        // NS_LOG_INFO("EchoRx: SAT " << satId << " received packet, but no GS is marked active for it. Time: " << Simulator::Now().GetSeconds() << "s. Socket TotalRx: " << socket->GetTotalRx());
+        return; // Satellite isn't expecting traffic from anyone or already processed.
+    }
+    int gsId = activeGsForSat[satId]; // The GS that *should* be sending to this satellite
+
+    // === CRITICAL CHANGE: Use the socket's GetTotalRx() for this specific connection ===
+    if (socket->GetTotalRx() >= 125000) { // Current GS transmission to this SAT is complete
+        std::pair<int, int> currentPair = std::make_pair(gsId, satId);
+
+        // Prevent re-processing if already marked as completed (e.g. due to delayed ACKs after logic moved on)
+        if (transmissionCompleted.count(currentPair) && transmissionCompleted[currentPair]) {
+            return;
+        }
+        transmissionCompleted[currentPair] = true; // Mark this specific GS-SAT transmission as done
+
+        gsRxEndTimes[currentPair] = Simulator::Now().GetSeconds();
+        NS_LOG_INFO("GS " << gsId << " -> SAT " << satId << " transmission FINISHES at: " << gsRxEndTimes[currentPair] << "s. Bytes: " << socket->GetTotalRx());
+
+        // Check if all ground stations assigned to this satellite have completed their transmissions
+        bool allGsForThisSatAreDone = true;
+        if (initialSatToGsAssignments.count(satId)) {
+            for (int assignedGsId : initialSatToGsAssignments.at(satId)) {
+                if (!transmissionCompleted.count(std::make_pair(assignedGsId, satId)) || !transmissionCompleted[std::make_pair(assignedGsId, satId)]) {
+                    allGsForThisSatAreDone = false;
+                    break;
+                }
+            }
+        } else {
+            allGsForThisSatAreDone = true; // No GS ever assigned to this satellite
+        }
+
+        if (allGsForThisSatAreDone && !satelliteHasCompletedAllTasks[satId]) {
+            satelliteActualCollectionTimes[satId] = Simulator::Now().GetSeconds();
+            satelliteHasCompletedAllTasks[satId] = true; // Mark to prevent re-logging
+            NS_LOG_INFO("SAT " << satId << " has collected all data at: " << satelliteActualCollectionTimes[satId] << "s");
+        }
+
+        // Satellite 'satId' is now free from 'gsId'.
+        activeGsForSat[satId] = -1; // Mark satellite as idle
+
+        // Try to schedule the next GS from this satellite's queue
+        if (gsQueuesForSatellite.count(satId) && !gsQueuesForSatellite[satId].empty()) {
+            int nextGsId = gsQueuesForSatellite[satId].front();
+            gsQueuesForSatellite[satId].pop_front();
+
+            activeGsForSat[satId] = nextGsId; // Mark satellite as busy with the NEW gsId
+            NS_LOG_INFO("SAT " << satId << " is now free. Scheduling next GS " << nextGsId << " at " << Simulator::Now().GetSeconds() << "s");
+            Simulator::Schedule(Simulator::Now(), &SendPacket, nextGsId, satId);
+        } else {
+            NS_LOG_INFO("SAT " << satId << " is now free. No more GS in its queue at " << Simulator::Now().GetSeconds() << "s");
+        }
+    }
+}
+
+void ConnectTcpRxCallback() {
+    Config::Connect("/NodeList/*/$ns3::TcpL4Protocol/SocketList/*/Rx", MakeCallback(&EchoRx));
+}
+
+int main(int argc, char *argv[]) {
+    LogComponentEnable("Lab4", LOG_LEVEL_INFO); // Enable logging for this component
+
+    std::string constellation = "TelesatGateway"; // Default, matches lab PDF
+    double duration = 300.0; // Increased duration to ensure all transmissions can complete
+    std::string inputFile = "network.ortools.out"; // Default
+    std::string outputFile = "lab4.ortools.out";  // Default
+
+    CommandLine cmd(__FILE__); // Use __FILE__ for CommandLine
+    cmd.AddValue("duration", "Duration of the simulation in seconds", duration);
+    cmd.AddValue("constellation", "LEO constellation link settings name", constellation);
+    cmd.AddValue("inputFile", "Input file for GS-SAT association", inputFile);
+    cmd.AddValue("outputFile", "Output file for results", outputFile);
+    cmd.Parse(argc, argv);
+
+    // TCP Congestion Control (Optional, but good practice for TCP sims)
+    // Config::SetDefault("ns3::TcpL4Protocol::SocketType", StringValue("ns3::TcpNewReno"));
+    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(1024)); // Typical MSS
+    Config::SetDefault("ns3::TcpSocket::DelAckCount", UintegerValue(1));    // For faster ACKs
+    Config::SetDefault("ns3::TcpSocketBase::MinRto", TimeValue(Seconds(0.2))); // Min RTO
+
+    // Satellites
+    LeoOrbitNodeHelper orbit;
+    satellites = orbit.Install({LeoOrbit(1200, 20, 1, 60)}); // 60 satellites
+
+    // Ground stations
+    LeoGndNodeHelper ground;
+    // (Using your provided ground station locations)
+    ground.Add(groundStations, LeoLatLong(20, 4)); ground.Add(groundStations, LeoLatLong(19, 12));
+    ground.Add(groundStations, LeoLatLong(19, 10)); ground.Add(groundStations, LeoLatLong(19, 19));
+    ground.Add(groundStations, LeoLatLong(19, 20)); ground.Add(groundStations, LeoLatLong(18, 20));
+    ground.Add(groundStations, LeoLatLong(18, 22)); ground.Add(groundStations, LeoLatLong(17, 26));
+    ground.Add(groundStations, LeoLatLong(18, 30)); ground.Add(groundStations, LeoLatLong(15, 40));
+    ground.Add(groundStations, LeoLatLong(14, 25)); ground.Add(groundStations, LeoLatLong(14, 30));
+    ground.Add(groundStations, LeoLatLong(14, 40)); ground.Add(groundStations, LeoLatLong(14, 50));
+    ground.Add(groundStations, LeoLatLong(14, 52)); ground.Add(groundStations, LeoLatLong(13, 50));
+    ground.Add(groundStations, LeoLatLong(13, 48)); ground.Add(groundStations, LeoLatLong(12, 50));
+    ground.Add(groundStations, LeoLatLong(13, 52)); ground.Add(groundStations, LeoLatLong(15, 30)); // 20 ground stations
+
+    // Network Setup
+    LeoChannelHelper utCh;
+    utCh.SetConstellation(constellation);
+    // Create devices for all satellites and ground stations
+    NetDeviceContainer allDevices = utCh.Install(satellites, groundStations); 
+    // utNet = allDevices; // If you need utNet globally for some reason, otherwise it's fine locally.
+
+    AodvHelper aodv;
+    aodv.Set("EnableHello", BooleanValue(false)); // As per your original code
+
+    InternetStackHelper stack;
+    stack.SetRoutingHelper(aodv);
+    stack.Install(satellites);
+    stack.Install(groundStations);
+
+    Ipv4AddressHelper ipv4;
+    ipv4.SetBase("10.1.0.0", "255.255.0.0");
+    ipv4.Assign(allDevices); // Assign IPs to all created devices
+
+    // Setup Packet Sinks on all satellites
+    PacketSinkHelper sinkHelper("ns3::TcpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
+    ApplicationContainer serverApps; // To hold sink applications
+    for (uint32_t i = 0; i < satellites.GetN(); ++i) {
+        serverApps.Add(sinkHelper.Install(satellites.Get(i)));
+        activeGsForSat[i] = -1; // Initialize all satellites as idle
+        satelliteHasCompletedAllTasks[i] = false; // Initialize completion status
+    }
+    serverApps.Start(Seconds(0.0));
+    // serverApps.Stop(Seconds(duration)); // Sinks can run for the whole duration
+
+    // Task 1: Input File Processing
+    std::ifstream infile(inputFile);
+    if (!infile.is_open()) {
+        NS_LOG_ERROR("Cannot open input file: " << inputFile);
+        return 1;
+    }
+    std::string headerLine;
+    std::getline(infile, headerLine); // Skip header line (e.g., "Total collection time: ...")
+
+    int gsId_logical, satId_logical;
+    std::vector<std::pair<int, int>> associations; // Store all associations
+    while (infile >> gsId_logical >> satId_logical) {
+        if (gsId_logical < 0 || (uint32_t)gsId_logical >= groundStations.GetN() ||
+            satId_logical < 0 || (uint32_t)satId_logical >= satellites.GetN()) {
+            NS_LOG_WARN("Invalid GS ID " << gsId_logical << " or SAT ID " << satId_logical << " from input file. Skipping.");
+            continue;
+        }
+        associations.push_back({gsId_logical, satId_logical});
+        initialSatToGsAssignments[satId_logical].insert(gsId_logical);
+    }
+    infile.close();
+
+    // Populate gsQueuesForSatellite, ensuring gsIds are sorted for each satellite
+    for (auto const& [sat_id, gs_set] : initialSatToGsAssignments) {
+        std::vector<int> sorted_gs_ids(gs_set.begin(), gs_set.end());
+        std::sort(sorted_gs_ids.begin(), sorted_gs_ids.end()); // Smaller GS IDs first
+        for (int gs_id : sorted_gs_ids) {
+            gsQueuesForSatellite[sat_id].push_back(gs_id);
+        }
     }
     
-    if(!satTaskQueue[satId].empty()){
-      auto [nextGsId, nextSatId] = satTaskQueue[satId].front();
-      satTaskQueue[satId].pop();
-      Simulator::ScheduleNow(&SendPacket, nextGsId, nextSatId);
-    }else{
-      satBusy.erase(satId);
+    // === MODIFIED Task 2.2: Initial Call to SendPacket ===
+    // For each satellite, if it has a queue and is idle, start the first GS transmission
+    for (uint32_t sat_idx = 0; sat_idx < satellites.GetN(); ++sat_idx) {
+        if (activeGsForSat[sat_idx] == -1 && gsQueuesForSatellite.count(sat_idx) && !gsQueuesForSatellite[sat_idx].empty()) {
+            int gsToStart = gsQueuesForSatellite[sat_idx].front();
+            gsQueuesForSatellite[sat_idx].pop_front();
+
+            activeGsForSat[sat_idx] = gsToStart; // Mark satellite as busy with this GS
+            NS_LOG_INFO("Main: Scheduling initial SendPacket for GS " << gsToStart << " to SAT " << sat_idx << " at 0.0s");
+            Simulator::Schedule(Seconds(0.0), &SendPacket, gsToStart, sat_idx);
+        }
     }
 
-    for (const auto &entry : finished) {
-      int gsId = entry.first.first;
-      int sid = entry.first.second;
-      if (gsStarted.count(gsId) == 0 && sid == satId) {
-        gsStarted.insert(gsId);
-        Simulator::Schedule(Simulator::Now(), &SendPacket, gsId, sid);
-        break;
-      }
+    Simulator::Schedule(Seconds(1e-7), &ConnectTcpRxCallback); // Connect the Rx trace
+    Simulator::Stop(Seconds(duration));
+    Simulator::Run();
+    Simulator::Destroy();
+
+    // Task 4: Output File Generation
+    std::ofstream out(outputFile);
+    if (!out.is_open()) {
+        NS_LOG_ERROR("Cannot open output file: " << outputFile);
+        return 1;
     }
-  }
-}
+    out << std::fixed << std::setprecision(6); // For consistent float output
 
-
-void SendPacket(int gsId, int satId){
-  // Task 2.1: Complete this function
-  Ptr<Node> sender = groundStations.Get(gsId);           
-  Ptr<Node> receiver = satellites.Get(satId);             
-
-  Ipv4Address dstAddr = receiver->GetObject<Ipv4>()->GetAddress(1, 0).GetLocal();  
-
-  // TCP
-  BulkSendHelper bulk("ns3::TcpSocketFactory", InetSocketAddress(dstAddr, port));
-  bulk.SetAttribute("MaxBytes", UintegerValue(125000));  // 傳送上限：125000 bytes
-  bulk.SetAttribute("SendSize", UintegerValue(512));     // 每次封包大小：512 bytes
-
-  ApplicationContainer app = bulk.Install(sender);     
-  Time now = Simulator::Now();  
-  app.Start(now);
-  app.Stop(Seconds(100.0));                              
-
-  std::ofstream log("send_time.log", std::ios::app);
-  log << "GS " << gsId << " -> SAT " << satId
-      << " starts sending at: " << Simulator::Now().GetSeconds() << "s\n";
-  log.close();
-}
-
-
-
-string GetNodeId(string str) {
-  // Which node
-  size_t pos1 = str.find("/", 0);           // The first "/"
-  size_t pos2 = str.find("/", pos1 + 1);    // The second "/"
-  size_t pos3 = str.find("/", pos2 + 1);    // The third "/"
-  return str.substr(pos2 + 1, pos3 - pos2 - 1); // Node id
-}
-
-void Connect(){
-  Config::Connect ("/NodeList/*/$ns3::TcpL4Protocol/SocketList/*/Rx", MakeCallback (&EchoRx));
-}
-
-NS_LOG_COMPONENT_DEFINE ("Lab4");
-
-int main(int argc, char *argv[]){
-	
-  std::ofstream("send_time.log", std::ios::trunc).close();
-  std::ofstream("recv_time.log", std::ios::trunc).close();
-  std::ofstream("collection_time.log", std::ios::trunc).close();
-  
-  
-
-  CommandLine cmd;
-  string constellation = "TelesatGateway";
-  double duration = 100;
-  string inputFile = "network.ortools.out";
-  string outputFile = "lab4.ortools.out";
-
-  cmd.AddValue("duration", "Duration of the simulation in seconds", duration);
-  cmd.AddValue("constellation", "LEO constellation link settings name", constellation);
-  cmd.AddValue("inputFile", "Input file", inputFile);
-  cmd.AddValue("outputFile", "Output file", outputFile);
-  cmd.Parse (argc, argv);
-
-  // Default setting
-  Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(512));
-  Config::SetDefault("ns3::TcpSocketBase::MinRto", TimeValue(Seconds(2.0)));
-
-  // Satellite
-  LeoOrbitNodeHelper orbit;
-  satellites = orbit.Install({ LeoOrbit(1200, 20, 1, 60)});
-
-  // Ground station
-  LeoGndNodeHelper ground;
-  ground.Add(groundStations, LeoLatLong(20, 4));
-  ground.Add(groundStations, LeoLatLong(19, 12));
-  ground.Add(groundStations, LeoLatLong(19, 10));
-  ground.Add(groundStations, LeoLatLong(19, 19));
-  ground.Add(groundStations, LeoLatLong(19, 20));
-  ground.Add(groundStations, LeoLatLong(18, 20));
-  ground.Add(groundStations, LeoLatLong(18, 22));
-  ground.Add(groundStations, LeoLatLong(17, 26));
-  ground.Add(groundStations, LeoLatLong(18, 30));
-  ground.Add(groundStations, LeoLatLong(15, 40));
-  ground.Add(groundStations, LeoLatLong(14, 25));
-  ground.Add(groundStations, LeoLatLong(14, 30));
-  ground.Add(groundStations, LeoLatLong(14, 40));
-  ground.Add(groundStations, LeoLatLong(14, 50));
-  ground.Add(groundStations, LeoLatLong(14, 52));
-  ground.Add(groundStations, LeoLatLong(13, 50));
-  ground.Add(groundStations, LeoLatLong(13, 48));
-  ground.Add(groundStations, LeoLatLong(12, 50));
-  ground.Add(groundStations, LeoLatLong(13, 52));
-  ground.Add(groundStations, LeoLatLong(15, 30));
-
-  // Set network
-  LeoChannelHelper utCh;
-  utCh.SetConstellation (constellation);
-  utNet = utCh.Install (satellites, groundStations);
-
-  AodvHelper aodv;
-  aodv.Set ("EnableHello", BooleanValue (false));
-  
-  InternetStackHelper stack;
-  stack.SetRoutingHelper (aodv);
-  stack.Install (satellites);
-  stack.Install (groundStations);
-
-  Ipv4AddressHelper ipv4;
-  ipv4.SetBase ("10.1.0.0", "255.255.0.0");
-  ipv4.Assign (utNet);
-
-  // Receiver: satellites
-  PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
-  for(int i=0; i<60; i++){
-    sinkApps.Add(sink.Install(satellites.Get(i)));
-  }
-
-  // Task 1: Input File
-  std::ifstream infile(inputFile);
-  if (!infile.is_open()) {
-    NS_LOG_ERROR("Cannot open input file: " << inputFile);
-    return 1;
-  }
-  
-  int src, dst;
-  std::vector<std::pair<int, int>> sendTasks;
-  std::string line;
-  std::getline(infile, line); 
-  
-  while (infile >> src >> dst) {
-    sendTasks.emplace_back(src, dst);
-    finished[{src, dst}] = false;
-    satToGsMap[dst].insert(src);
-  }
-  infile.close();
-
-
-  // Task 2.2: Call SendPacket()
-  for (auto [gsId, satId] : sendTasks) {
-    satTaskQueue[satId].push({gsId, satId});
-  }
-  
-  for (auto [satId, queue] : satTaskQueue) {
-    if (!queue.empty()) {
-      auto [gsId, sid] = queue.front();
-      queue.pop();
-      satBusy.insert(satId);
-      Simulator::Schedule(Simulator::Now(), &SendPacket, gsId, sid);
+    double totalOverallCollectionTime = 0.0;
+    for (auto const& [sat_id, time] : satelliteActualCollectionTimes) {
+        if (time > totalOverallCollectionTime) {
+            totalOverallCollectionTime = time;
+        }
     }
-  }
-
-  Simulator::Schedule(Seconds(1e-7), &Connect);
-  Simulator::Stop (Seconds (duration));
-  Simulator::Run ();
-  Simulator::Destroy ();
-
-  // Task 4: Output File
-  // Task 4: Output File
-  std::ofstream out(outputFile);
-  if (!out.is_open()) {
-    NS_LOG_ERROR("Cannot open output file: " << outputFile);
-    return 1;
-  }
-  
-  // 找出 total collection time（所有衛星的最大收集時間）
-  double totalCollectionTime = 0.0;
-  std::map<int, double> satCollectionTime;
-  std::ifstream collectFile("collection_time.log");
-  while (std::getline(collectFile, line)) {
-    std::istringstream iss(line);
-    std::string dummy;
-    int satId;
-    double time = 0.0;
-    iss >> dummy >> satId >> dummy >> dummy >> dummy >> dummy >> time;
-    satCollectionTime[satId] = time;
-    totalCollectionTime = std::max(totalCollectionTime, time);
-  }
-  collectFile.close();
-  
-  // 解析 ground station 傳送與接收時間
-  std::map<int, double> txStart, rxEnd;
-  std::ifstream sendFile("send_time.log");
-  while (std::getline(sendFile, line)) {
-    std::istringstream iss(line);
-    std::string dummy;
-    int gsId;
-    double time;
-    iss >> dummy >> gsId >> dummy >> dummy >> dummy >> dummy >> dummy >> time;
-    txStart[gsId] = time;
-  }
-  sendFile.close();
-  
-  std::ifstream recvFile("recv_time.log");
-  while (std::getline(recvFile, line)) {
-    std::istringstream iss(line);
-    std::string dummy;
-    int gsId;
-    double time;
-    iss >> dummy >> gsId >> dummy >> dummy >> dummy >> dummy >> dummy >> time;
-    rxEnd[gsId] = time;
-  }
-  recvFile.close();
-  
-  // 輸出格式
-  out << totalCollectionTime << "\n";
-  out << "\n";
-  // 衛星資訊（升冪排序）
-  for(int satId = 0; satId < 10; ++satId){
-    if (satCollectionTime.count(satId)){
-      out << satId << " " << satCollectionTime[satId] << "\n";
+     // If some satellites had no assignments, their collection time is 0.
+    // If initialSatToGsAssignments is empty, totalOverallCollectionTime will remain 0.
+    // If some satellites had assignments but didn't finish (e.g. duration too short), their time won't be in satelliteActualCollectionTimes.
+    // The problem implies total collection time is max of individual sat collection times.
+    
+    // If a satellite had assignments but never finished, its entry might be missing from satelliteActualCollectionTimes.
+    // We should consider all satellites that had assignments.
+    for (auto const& [sat_id, assigned_gs_set] : initialSatToGsAssignments) {
+        if (!assigned_gs_set.empty() && satelliteActualCollectionTimes.find(sat_id) == satelliteActualCollectionTimes.end()) {
+            NS_LOG_WARN("Satellite " << sat_id << " had assignments but did not record a collection time. Assuming it did not complete within simulation duration.");
+             // If it didn't complete, its collection time effectively extends to sim duration or beyond.
+             // For this output, we might report duration if it didn't finish.
+             // However, the lab expects times based on completion. If it doesn't complete, that's a different issue.
+        }
     }
-    else out << satId << " 0" << "\n";
-  }
-  //for (auto &[satId, time] : satCollectionTime) {
-  //  out << satId << " " << time << "\n";
-  //}
-  out << "\n";
-  // 地面站資訊（升冪排序）
-  for (auto &[gsId, startTime] : txStart) {
-    out << gsId << " " << startTime << " " << rxEnd[gsId] << "\n";
-  }
-  
-  out.close();
-  std::cout << "Output written to " << outputFile << std::endl;
 
 
+    out << totalOverallCollectionTime << "\n";
 
-  return 0;
+    // Satellite collection times (sorted by sat_id, output all satellites 0 to N-1)
+    for (uint32_t i = 0; i < satellites.GetN(); ++i) {
+        if (satelliteActualCollectionTimes.count(i)) {
+            out << i << " " << satelliteActualCollectionTimes[i] << "\n";
+        } else {
+            // If satellite had no assignments, or didn't complete, its collection time is 0 (or sim duration if incomplete)
+            // The lab sample output implies 0 if no tasks.
+             bool had_assignments = initialSatToGsAssignments.count(i) && !initialSatToGsAssignments.at(i).empty();
+             if (had_assignments) {
+                 // It had assignments but no collection time means it didn't finish all.
+                 // The problem doesn't specify what to output here. Usually it's the completion time.
+                 // For now, outputting 0.0, but this might need adjustment based on expected output for incomplete satellites.
+                 out << i << " " << 0.0 << "\n"; // Or duration, or some indicator of non-completion
+                 NS_LOG_WARN("Satellite " << i << " had assignments but no recorded collection time for output.");
+             } else {
+                 out << i << " " << 0.0 << "\n"; // No assignments, collection time is 0
+             }
+        }
+    }
+    
+    // Ground station transmission start and reception end times (sorted by gs_id)
+    // Need to gather all unique GS IDs that participated.
+    std::set<int> uniqueGsIds;
+    for(const auto& assoc : associations){
+        uniqueGsIds.insert(assoc.first);
+    }
+
+    for (uint32_t i = 0; i < groundStations.GetN(); ++i) {
+         bool gs_participated = false;
+         double start_t = 0.0, end_t = 0.0;
+
+        // Find the satellite this GS was assigned to (assuming one GS -> one SAT from input)
+        int assigned_sat_for_this_gs = -1;
+        for(const auto& assoc : associations){
+            if(assoc.first == (int)i){
+                assigned_sat_for_this_gs = assoc.second;
+                gs_participated = true;
+                break;
+            }
+        }
+
+        if(gs_participated && assigned_sat_for_this_gs != -1){
+            std::pair<int,int> gs_sat_pair = std::make_pair(i, assigned_sat_for_this_gs);
+            if(gsTxStartTimes.count(gs_sat_pair)){
+                start_t = gsTxStartTimes[gs_sat_pair];
+            } else {
+                 NS_LOG_WARN("GS " << i << " was assigned but has no TxStartTime recorded.");
+            }
+            if(gsRxEndTimes.count(gs_sat_pair)){
+                end_t = gsRxEndTimes[gs_sat_pair];
+            } else {
+                NS_LOG_WARN("GS " << i << " was assigned but has no RxEndTime recorded (likely did not complete).");
+                // If it didn't complete, its end time might be considered duration or be 0.
+                // For now, outputting recorded end_t which will be 0 if not found.
+            }
+             out << i << " " << start_t << " " << end_t << "\n";
+        } else if (uniqueGsIds.count(i)){
+            // This GS ID was in the input file but somehow not processed above
+            // or logic error. Outputting 0s.
+            out << i << " " << 0.0 << " " << 0.0 << "\n";
+            NS_LOG_WARN("GS " << i << " was in uniqueGSIDs but not found in output loop properly.");
+        }
+        // If a GS ID (0 to groundStations.GetN()-1) was NOT in the input file, it shouldn't be in the output.
+        // The lab asks for "Each of next #ground station lines", implying those that participated or were defined.
+        // The sample output seems to list GSs that had associations.
+    }
+
+    out.close();
+    NS_LOG_INFO("Output written to " << outputFile);
+
+    return 0;
 }
