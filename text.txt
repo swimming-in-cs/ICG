@@ -1,0 +1,183 @@
+[2927/2977] Compiling contrib/leo/examples/leo-lab4.cc
+../contrib/leo/examples/leo-lab4.cc: In function ‘void EchoRx(std::string, ns3::Ptr<const ns3::Packet>, const ns3::TcpHeader&, ns3::Ptr<const ns3::TcpSocketBase>)’:
+../contrib/leo/examples/leo-lab4.cc:35:13: warning: comparison of integer expressions of different signedness: ‘int’ and ‘uint32_t’ {aka ‘unsigned int’} [-Wsign-compare]
+   35 |   if (satId >= satellites.GetN()) return;
+      |       ~~~~~~^~~~~~~~~~~~~~~~~~~~
+../contrib/leo/examples/leo-lab4.cc:40:36: error: no match for ‘operator[]’ (operand types are ‘std::map<std::pair<int, int>, bool>’ and ‘<brace-enclosed initializer list>’)
+   40 |       if (sid == satId && !finished[{gsId, sid}]) {
+      |                                    ^
+In file included from /usr/include/c++/11/map:61,
+                 from ./ns3/log.h:27,
+                 from ./ns3/fatal-error.h:29,
+                 from ./ns3/abort.h:24,
+                 from ./ns3/core-module.h:10,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+/usr/include/c++/11/bits/stl_map.h:492:7: note: candidate: ‘std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = std::pair<int, int>; _Tp = bool; _Compare = std::less<std::pair<int, int> >; _Alloc = std::allocator<std::pair<const std::pair<int, int>, bool> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = bool; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = std::pair<int, int>]’
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/include/c++/11/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from ‘<brace-enclosed initializer list>’ to ‘const key_type&’ {aka ‘const std::pair<int, int>&’}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/11/bits/stl_map.h:512:7: note: candidate: ‘std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = std::pair<int, int>; _Tp = bool; _Compare = std::less<std::pair<int, int> >; _Alloc = std::allocator<std::pair<const std::pair<int, int>, bool> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = bool; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = std::pair<int, int>]’
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/include/c++/11/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from ‘<brace-enclosed initializer list>’ to ‘std::map<std::pair<int, int>, bool>::key_type&&’ {aka ‘std::pair<int, int>&&’}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+../contrib/leo/examples/leo-lab4.cc:41:17: error: no match for ‘operator[]’ (operand types are ‘std::map<std::pair<int, int>, bool>’ and ‘<brace-enclosed initializer list>’)
+   41 |         finished[{gsId, sid}] = true;
+      |                 ^
+In file included from /usr/include/c++/11/map:61,
+                 from ./ns3/log.h:27,
+                 from ./ns3/fatal-error.h:29,
+                 from ./ns3/abort.h:24,
+                 from ./ns3/core-module.h:10,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+/usr/include/c++/11/bits/stl_map.h:492:7: note: candidate: ‘std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = std::pair<int, int>; _Tp = bool; _Compare = std::less<std::pair<int, int> >; _Alloc = std::allocator<std::pair<const std::pair<int, int>, bool> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = bool; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = std::pair<int, int>]’
+  492 |       operator[](const key_type& __k)
+      |       ^~~~~~~~
+/usr/include/c++/11/bits/stl_map.h:492:34: note:   no known conversion for argument 1 from ‘<brace-enclosed initializer list>’ to ‘const key_type&’ {aka ‘const std::pair<int, int>&’}
+  492 |       operator[](const key_type& __k)
+      |                  ~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/11/bits/stl_map.h:512:7: note: candidate: ‘std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = std::pair<int, int>; _Tp = bool; _Compare = std::less<std::pair<int, int> >; _Alloc = std::allocator<std::pair<const std::pair<int, int>, bool> >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = bool; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = std::pair<int, int>]’
+  512 |       operator[](key_type&& __k)
+      |       ^~~~~~~~
+/usr/include/c++/11/bits/stl_map.h:512:29: note:   no known conversion for argument 1 from ‘<brace-enclosed initializer list>’ to ‘std::map<std::pair<int, int>, bool>::key_type&&’ {aka ‘std::pair<int, int>&&’}
+  512 |       operator[](key_type&& __k)
+      |                  ~~~~~~~~~~~^~~
+../contrib/leo/examples/leo-lab4.cc:64:27: error: no matching function for call to ‘std::set<int>::count(std::tuple_element<0, std::pair<const std::pair<int, int>, bool> >::type&)’
+   64 |       if (!gsStarted.count(gsId) && sid == satId) {
+      |            ~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/include/c++/11/set:61,
+                 from ./ns3/nstime.h:33,
+                 from ./ns3/command-line.h:28,
+                 from ./ns3/core-module.h:25,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+/usr/include/c++/11/bits/stl_set.h:754:9: note: candidate: ‘template<class _Kt> decltype (((const std::set<_Key, _Compare, _Alloc>*)this)->std::set<_Key, _Compare, _Alloc>::_M_t._M_count_tr(__x)) std::set<_Key, _Compare, _Alloc>::count(const _Kt&) const [with _Kt = _Kt; _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>]’
+  754 |         count(const _Kt& __x) const
+      |         ^~~~~
+/usr/include/c++/11/bits/stl_set.h:754:9: note:   template argument deduction/substitution failed:
+/usr/include/c++/11/bits/stl_set.h: In substitution of ‘template<class _Kt> decltype (((const std::set<int>*)this)->std::set<int>::_M_t.std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::_M_count_tr<_Kt, _Req>(__x)) std::set<int>::count<_Kt>(const _Kt&) const [with _Kt = std::pair<int, int>]’:
+../contrib/leo/examples/leo-lab4.cc:64:27:   required from here
+/usr/include/c++/11/bits/stl_set.h:755:37: error: no matching function for call to ‘std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::_M_count_tr(const std::pair<int, int>&) const’
+  755 |         -> decltype(_M_t._M_count_tr(__x))
+      |                     ~~~~~~~~~~~~~~~~^~~~~
+In file included from /usr/include/c++/11/map:60,
+                 from ./ns3/log.h:27,
+                 from ./ns3/fatal-error.h:29,
+                 from ./ns3/abort.h:24,
+                 from ./ns3/core-module.h:10,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+/usr/include/c++/11/bits/stl_tree.h:1314:9: note: candidate: ‘template<class _Kt, class _Req> std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::size_type std::_Rb_tree<_Key, _Val, _KeyOfValue, _Compare, _Alloc>::_M_count_tr(const _Kt&) const [with _Kt = _Kt; _Req = _Req; _Key = int; _Val = int; _KeyOfValue = std::_Identity<int>; _Compare = std::less<int>; _Alloc = std::allocator<int>]’
+ 1314 |         _M_count_tr(const _Kt& __k) const
+      |         ^~~~~~~~~~~
+/usr/include/c++/11/bits/stl_tree.h:1314:9: note:   template argument deduction/substitution failed:
+In file included from /usr/include/c++/11/string:48,
+                 from /usr/include/c++/11/bits/locale_classes.h:40,
+                 from /usr/include/c++/11/bits/ios_base.h:41,
+                 from /usr/include/c++/11/ios:42,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from ../contrib/leo/examples/leo-lab4.cc:1:
+/usr/include/c++/11/bits/stl_function.h: In substitution of ‘template<class _Func, class _SfinaeType> using __has_is_transparent_t = typename std::__has_is_transparent<_Func, _SfinaeType>::type [with _Func = std::less<int>; _SfinaeType = std::pair<int, int>]’:
+/usr/include/c++/11/bits/stl_tree.h:1312:9:   required by substitution of ‘template<class _Kt> decltype (((const std::set<int>*)this)->std::set<int>::_M_t.std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::_M_count_tr<_Kt, _Req>(__x)) std::set<int>::count<_Kt>(const _Kt&) const [with _Kt = std::pair<int, int>]’
+../contrib/leo/examples/leo-lab4.cc:64:27:   required from here
+/usr/include/c++/11/bits/stl_function.h:1413:11: error: no type named ‘type’ in ‘struct std::__has_is_transparent<std::less<int>, std::pair<int, int>, void>’
+ 1413 |     using __has_is_transparent_t
+      |           ^~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/include/c++/11/set:61,
+                 from ./ns3/nstime.h:33,
+                 from ./ns3/command-line.h:28,
+                 from ./ns3/core-module.h:25,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+/usr/include/c++/11/bits/stl_set.h:748:7: note: candidate: ‘std::set<_Key, _Compare, _Alloc>::size_type std::set<_Key, _Compare, _Alloc>::count(const key_type&) const [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>; std::set<_Key, _Compare, _Alloc>::size_type = long unsigned int; std::set<_Key, _Compare, _Alloc>::key_type = int]’
+  748 |       count(const key_type& __x) const
+      |       ^~~~~
+/usr/include/c++/11/bits/stl_set.h:748:29: note:   no known conversion for argument 1 from ‘std::tuple_element<0, std::pair<const std::pair<int, int>, bool> >::type’ {aka ‘const std::pair<int, int>’} to ‘const key_type&’ {aka ‘const int&’}
+  748 |       count(const key_type& __x) const
+      |             ~~~~~~~~~~~~~~~~^~~
+../contrib/leo/examples/leo-lab4.cc:65:25: error: no matching function for call to ‘std::set<int>::insert(std::tuple_element<0, std::pair<const std::pair<int, int>, bool> >::type&)’
+   65 |         gsStarted.insert(gsId);
+      |         ~~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/include/c++/11/set:61,
+                 from ./ns3/nstime.h:33,
+                 from ./ns3/command-line.h:28,
+                 from ./ns3/core-module.h:25,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+/usr/include/c++/11/bits/stl_set.h:566:9: note: candidate: ‘template<class _InputIterator> void std::set<_Key, _Compare, _Alloc>::insert(_InputIterator, _InputIterator) [with _InputIterator = _InputIterator; _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>]’
+  566 |         insert(_InputIterator __first, _InputIterator __last)
+      |         ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:566:9: note:   template argument deduction/substitution failed:
+../contrib/leo/examples/leo-lab4.cc:65:25: note:   candidate expects 2 arguments, 1 provided
+   65 |         gsStarted.insert(gsId);
+      |         ~~~~~~~~~~~~~~~~^~~~~~
+In file included from /usr/include/c++/11/set:61,
+                 from ./ns3/nstime.h:33,
+                 from ./ns3/command-line.h:28,
+                 from ./ns3/core-module.h:25,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+/usr/include/c++/11/bits/stl_set.h:509:7: note: candidate: ‘std::pair<typename std::_Rb_tree<_Key, _Key, std::_Identity<_Tp>, _Compare, typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key>::other>::const_iterator, bool> std::set<_Key, _Compare, _Alloc>::insert(const value_type&) [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>; typename std::_Rb_tree<_Key, _Key, std::_Identity<_Tp>, _Compare, typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key>::other>::const_iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key>::other = std::allocator<int>; typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key> = __gnu_cxx::__alloc_traits<std::allocator<int>, int>::rebind<int>; typename _Alloc::value_type = int; std::set<_Key, _Compare, _Alloc>::value_type = int]’
+  509 |       insert(const value_type& __x)
+      |       ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:509:32: note:   no known conversion for argument 1 from ‘std::tuple_element<0, std::pair<const std::pair<int, int>, bool> >::type’ {aka ‘const std::pair<int, int>’} to ‘const value_type&’ {aka ‘const int&’}
+  509 |       insert(const value_type& __x)
+      |              ~~~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/11/bits/stl_set.h:518:7: note: candidate: ‘std::pair<typename std::_Rb_tree<_Key, _Key, std::_Identity<_Tp>, _Compare, typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key>::other>::const_iterator, bool> std::set<_Key, _Compare, _Alloc>::insert(std::set<_Key, _Compare, _Alloc>::value_type&&) [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>; typename std::_Rb_tree<_Key, _Key, std::_Identity<_Tp>, _Compare, typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key>::other>::const_iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key>::other = std::allocator<int>; typename __gnu_cxx::__alloc_traits<_Alloc>::rebind<_Key> = __gnu_cxx::__alloc_traits<std::allocator<int>, int>::rebind<int>; typename _Alloc::value_type = int; std::set<_Key, _Compare, _Alloc>::value_type = int]’
+  518 |       insert(value_type&& __x)
+      |       ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:518:27: note:   no known conversion for argument 1 from ‘std::tuple_element<0, std::pair<const std::pair<int, int>, bool> >::type’ {aka ‘const std::pair<int, int>’} to ‘std::set<int>::value_type&&’ {aka ‘int&&’}
+  518 |       insert(value_type&& __x)
+      |              ~~~~~~~~~~~~~^~~
+/usr/include/c++/11/bits/stl_set.h:546:7: note: candidate: ‘std::set<_Key, _Compare, _Alloc>::iterator std::set<_Key, _Compare, _Alloc>::insert(std::set<_Key, _Compare, _Alloc>::const_iterator, const value_type&) [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>; std::set<_Key, _Compare, _Alloc>::iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; std::set<_Key, _Compare, _Alloc>::const_iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; std::set<_Key, _Compare, _Alloc>::value_type = int]’
+  546 |       insert(const_iterator __position, const value_type& __x)
+      |       ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:546:7: note:   candidate expects 2 arguments, 1 provided
+/usr/include/c++/11/bits/stl_set.h:551:7: note: candidate: ‘std::set<_Key, _Compare, _Alloc>::iterator std::set<_Key, _Compare, _Alloc>::insert(std::set<_Key, _Compare, _Alloc>::const_iterator, std::set<_Key, _Compare, _Alloc>::value_type&&) [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>; std::set<_Key, _Compare, _Alloc>::iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; std::set<_Key, _Compare, _Alloc>::const_iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; std::set<_Key, _Compare, _Alloc>::value_type = int]’
+  551 |       insert(const_iterator __position, value_type&& __x)
+      |       ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:551:7: note:   candidate expects 2 arguments, 1 provided
+/usr/include/c++/11/bits/stl_set.h:578:7: note: candidate: ‘void std::set<_Key, _Compare, _Alloc>::insert(std::initializer_list<_Tp>) [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>]’
+  578 |       insert(initializer_list<value_type> __l)
+      |       ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:578:43: note:   no known conversion for argument 1 from ‘std::tuple_element<0, std::pair<const std::pair<int, int>, bool> >::type’ {aka ‘const std::pair<int, int>’} to ‘std::initializer_list<int>’
+  578 |       insert(initializer_list<value_type> __l)
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+/usr/include/c++/11/bits/stl_set.h:598:7: note: candidate: ‘std::set<_Key, _Compare, _Alloc>::insert_return_type std::set<_Key, _Compare, _Alloc>::insert(std::set<_Key, _Compare, _Alloc>::node_type&&) [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>; std::set<_Key, _Compare, _Alloc>::insert_return_type = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::insert_return_type; std::set<_Key, _Compare, _Alloc>::node_type = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::node_type]’
+  598 |       insert(node_type&& __nh)
+      |       ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:598:26: note:   no known conversion for argument 1 from ‘std::tuple_element<0, std::pair<const std::pair<int, int>, bool> >::type’ {aka ‘const std::pair<int, int>’} to ‘std::set<int>::node_type&&’ {aka ‘std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::node_type&&’}
+  598 |       insert(node_type&& __nh)
+      |              ~~~~~~~~~~~~^~~~
+/usr/include/c++/11/bits/stl_set.h:603:7: note: candidate: ‘std::set<_Key, _Compare, _Alloc>::iterator std::set<_Key, _Compare, _Alloc>::insert(std::set<_Key, _Compare, _Alloc>::const_iterator, std::set<_Key, _Compare, _Alloc>::node_type&&) [with _Key = int; _Compare = std::less<int>; _Alloc = std::allocator<int>; std::set<_Key, _Compare, _Alloc>::iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; std::set<_Key, _Compare, _Alloc>::const_iterator = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::const_iterator; std::set<_Key, _Compare, _Alloc>::node_type = std::_Rb_tree<int, int, std::_Identity<int>, std::less<int>, std::allocator<int> >::node_type]’
+  603 |       insert(const_iterator __hint, node_type&& __nh)
+      |       ^~~~~~
+/usr/include/c++/11/bits/stl_set.h:603:7: note:   candidate expects 2 arguments, 1 provided
+../contrib/leo/examples/leo-lab4.cc: In function ‘int main(int, char**)’:
+../contrib/leo/examples/leo-lab4.cc:225:15: error: redeclaration of ‘std::string line’
+  225 |   std::string line;
+      |               ^~~~
+../contrib/leo/examples/leo-lab4.cc:190:15: note: ‘std::string line’ previously declared here
+  190 |   std::string line;
+      |               ^~~~
+In file included from ./ns3/simulator.h:26,
+                 from ./ns3/event-garbage-collector.h:25,
+                 from ./ns3/core-module.h:35,
+                 from ../contrib/leo/examples/leo-lab4.cc:4:
+./ns3/make-event.h: In instantiation of ‘void ns3::MakeEvent(void (*)(U1, U2), T1, T2)::EventFunctionImpl2::Notify() [with U1 = int; U2 = int; T1 = std::pair<int, int>; T2 = bool]’:
+./ns3/make-event.h:652:3:   required from ‘ns3::EventImpl* ns3::MakeEvent(void (*)(U1, U2), T1, T2) [with U1 = int; U2 = int; T1 = std::pair<int, int>; T2 = bool]’
+./ns3/simulator.h:597:35:   required from ‘static ns3::EventId ns3::Simulator::ScheduleNow(void (*)(Us ...), Ts&& ...) [with Us = {int, int}; Ts = {const std::pair<int, int>&, bool&}]’
+../contrib/leo/examples/leo-lab4.cc:66:31:   required from here
+./ns3/make-event.h:647:21: error: cannot convert ‘ns3::TypeTraits<std::pair<int, int> >::ReferencedType’ {aka ‘std::pair<int, int>’} to ‘int’ in argument passing
+  647 |       (*m_function)(m_a1, m_a2);
+      |                     ^~~~
+      |                     |
+      |                     ns3::TypeTraits<std::pair<int, int> >::ReferencedType {aka std::pair<int, int>}
+
+../contrib/leo/examples/leo-delay-tracing-example.cc: In function ‘void TraceIpDrop(std::string, const ns3::Ipv4Header&, ns3::Ptr<const ns3::Packet>, ns3::Ipv4L3Protocol::DropReason, ns3::Ptr<ns3::Ipv4>, uint32_t)’:
+../contrib/leo/examples/leo-delay-tracing-example.cc:62:10: warning: enumeration value ‘DROP_DUPLICATE’ not handled in switch [-Wswitch]
+   62 |   switch (reason)
+      |          ^
+
+Waf: Leaving directory `/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build'
+Build failed
+ -> task in 'leo-lab4' failed with exit status 1 (run with -v to display more information)
