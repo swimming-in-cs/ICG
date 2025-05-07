@@ -1,4 +1,202 @@
- ./waf --run "leo-lab4 --inputFile=network.ortools.out --outputFile=lab4.ortools.out"
+#include <iostream>
+#include <fstream>
+#include <algorithm>
+#include <map>
+#include <vector>
+#include <set>
 
-./waf configure --enable-examples --enable-tests --enable-mpi--disable-werror
+#include "ns3/core-module.h"
+#include "ns3/mobility-module.h"
+#include "ns3/leo-module.h"
+#include "ns3/network-module.h"
+#include "ns3/aodv-module.h"
+#include "ns3/internet-module.h"
+#include "ns3/applications-module.h"
 
+using namespace ns3;
+
+int port = 9;
+NodeContainer satellites;
+NodeContainer groundStations;
+NetDeviceContainer utNet;
+ApplicationContainer sinkApps;
+
+std::map<std::pair<int, int>, bool> finished;
+std::map<int, std::vector<int>> satToGsList;
+std::set<int> gsStarted;
+std::set<int> satFinished;
+
+auto GetNodeId = [](const std::string &str) {
+  size_t p1 = str.find('/', 0);
+  size_t p2 = str.find('/', p1 + 1);
+  size_t p3 = str.find('/', p2 + 1);
+  if (p2 == std::string::npos || p3 == std::string::npos) return std::string();
+  return str.substr(p2 + 1, p3 - p2 - 1);
+};
+
+static void SendPacket(int gsId, int satId) {
+  Ptr<Node> sender = groundStations.Get(gsId);
+  Ptr<Node> receiver = satellites.Get(satId);
+  Ipv4Address dstAddr = receiver->GetObject<Ipv4>()->GetAddress(1, 0).GetLocal();
+
+  BulkSendHelper bulk("ns3::TcpSocketFactory", InetSocketAddress(dstAddr, port));
+  bulk.SetAttribute("MaxBytes", UintegerValue(125000));
+  bulk.SetAttribute("SendSize", UintegerValue(512));
+
+  ApplicationContainer app = bulk.Install(sender);
+  app.Start(Simulator::Now());
+  app.Stop(Seconds(100.0));
+
+  std::ofstream log("send_time.log", std::ios::app);
+  log << "GS " << gsId << " -> SAT " << satId
+      << " starts sending at: " << Simulator::Now().GetSeconds() << "s\n";
+}
+
+static void EchoRx(std::string context, const Ptr<const Packet> packet,
+                   const TcpHeader &header, const Ptr<const TcpSocketBase> socket) {
+  int satId = std::stoi(GetNodeId(context));
+  if ((uint32_t)satId >= satellites.GetN()) return;
+
+  // Check completion per GS->SAT
+  for (auto &entry : finished) {
+    if (entry.first.second == satId && !entry.second) {
+      int gsId = entry.first.first;
+      Ptr<PacketSink> sink = satellites.Get(satId)->GetApplication(0)->GetObject<PacketSink>();
+      if (sink->GetTotalRx() >= 125000) {
+        entry.second = true;
+        std::ofstream log("recv_time.log", std::ios::app);
+        log << "GS " << gsId << " -> SAT " << satId
+            << " finishes at: " << Simulator::Now().GetSeconds() << "s\n";
+        break;
+      }
+    }
+  }
+
+  // If all GS for this SAT done, log collection time
+  bool allDone = true;
+  for (int gs : satToGsList[satId]) {
+    if (!finished[{gs, satId}]) { allDone = false; break; }
+  }
+  if (allDone && !satFinished.count(satId)) {
+    std::ofstream log("collection_time.log", std::ios::app);
+    log << "SAT " << satId << " collects all data at: "
+        << Simulator::Now().GetSeconds() << "s\n";
+    satFinished.insert(satId);
+  }
+
+  // Schedule next GS for this SAT
+  for (size_t i = 0; i < satToGsList[satId].size(); ++i) {
+    if (finished[{ satToGsList[satId][i], satId }]) {
+      if (i + 1 < satToGsList[satId].size()) {
+        int nextGs = satToGsList[satId][i + 1];
+        if (!gsStarted.count(nextGs)) {
+          gsStarted.insert(nextGs);
+          Simulator::Schedule(Seconds(0.0), &SendPacket, nextGs, satId);
+        }
+      }
+      break;
+    }
+  }
+}
+
+void Connect() {
+  Config::Connect("/NodeList/*/$ns3::TcpL4Protocol/SocketList/*/Rx", MakeCallback(&EchoRx));
+}
+
+int main(int argc, char *argv[]) {
+  CommandLine cmd;
+  double duration = 100;
+  std::string constellation = "TelesatGateway";
+  std::string inputFile = "network.ortools.out";
+  std::string outputFile = "lab4.ortools.out";
+  cmd.AddValue("duration", "Simulation duration", duration);
+  cmd.AddValue("constellation", "LEO constellation name", constellation);
+  cmd.AddValue("inputFile", "Input schedule file", inputFile);
+  cmd.AddValue("outputFile", "Output result file", outputFile);
+  cmd.Parse(argc, argv);
+
+  // Clean logs
+  std::ofstream("send_time.log", std::ios::trunc).close();
+  std::ofstream("recv_time.log", std::ios::trunc).close();
+  std::ofstream("collection_time.log", std::ios::trunc).close();
+
+  Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue(512));
+  Config::SetDefault("ns3::TcpSocketBase::MinRto", TimeValue(Seconds(2.0)));
+
+  // Setup nodes
+  LeoOrbitNodeHelper orbit;
+  satellites = orbit.Install({LeoOrbit(1200, 20, 1, 60)});
+  LeoGndNodeHelper ground;
+  // Add ground stations...
+  // [原有地面站設定省略]
+
+  // Channel & stack
+  LeoChannelHelper utCh;
+  utCh.SetConstellation(constellation);
+  utNet = utCh.Install(satellites, groundStations);
+  AodvHelper aodv; aodv.Set("EnableHello", BooleanValue(false));
+  InternetStackHelper stack; stack.SetRoutingHelper(aodv);
+  stack.Install(satellites); stack.Install(groundStations);
+  Ipv4AddressHelper ipv4; ipv4.SetBase("10.1.0.0","255.255.0.0");
+  ipv4.Assign(utNet);
+
+  PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
+  for (uint32_t i = 0; i < satellites.GetN(); ++i) {
+    sinkApps.Add(sink.Install(satellites.Get(i)));
+  }
+
+  // Read input and initialize maps
+  std::ifstream infile(inputFile);
+  int gsId, satId;
+  while (infile >> gsId >> satId) {
+    satToGsList[satId].push_back(gsId);
+    finished[{gsId, satId}] = false;
+  }
+
+  // Schedule first GS per SAT
+  for (auto &p : satToGsList) {
+    int sId = p.first;
+    int firstGs = p.second.front();
+    gsStarted.insert(firstGs);
+    Simulator::Schedule(Seconds(0.0), &SendPacket, firstGs, sId);
+  }
+
+  // Connect Rx callback immediately
+  Simulator::Schedule(Seconds(0.0), &Connect);
+  Simulator::Stop(Seconds(duration));
+  Simulator::Run();
+  Simulator::Destroy();
+
+  // Generate output file
+  std::ofstream out(outputFile);
+  double totalCollectionTime = 0;
+  std::map<int, double> satTime;
+  std::ifstream collectFile("collection_time.log");
+  std::string line;
+  while (std::getline(collectFile, line)) {
+    int s; double t;
+    if (sscanf(line.c_str(), "SAT %d collects all data at: %lf", &s, &t) == 2) {
+      satTime[s] = t;
+      totalCollectionTime = std::max(totalCollectionTime, t);
+    }
+  }
+  out << totalCollectionTime << "\n\n";
+  for (auto &p : satTime) {
+    out << p.first << " " << p.second << "\n";
+  }
+  out << "\n";
+  std::map<int,double> txStart, rxEnd;
+  auto parseLog = [&](const char* fname, auto &mapRef, const char* fmt) {
+    std::ifstream f(fname);
+    while (std::getline(f, line)) {
+      int g; double t;
+      if (sscanf(line.c_str(), fmt, &g, &t) == 2) mapRef[g] = t;
+    }
+  };
+  parseLog("send_time.log", txStart, "GS %d -> SAT %*d starts sending at: %lf");
+  parseLog("recv_time.log", rxEnd , "GS %d -> SAT %*d finishes at: %lf");
+  for (auto &p : txStart) {
+    out << p.first << " " << p.second << " " << rxEnd[p.first] << "\n";
+  }
+  return 0;
+}
