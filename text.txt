@@ -1,1 +1,4 @@
  ./waf --run "leo-lab4 --inputFile=network.ortools.out --outputFile=lab4.ortools.out"
+
+./waf configure --enable-examples --enable-tests --enable-mpi--disable-werror
+
