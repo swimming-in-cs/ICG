@@ -1,11 +1,5 @@
 #include <iostream>
 #include <algorithm>
-#include <set>
-#include <map>
-#include <vector>
-#include <string>
-#include <fstream>
-#include <sstream>
 
 #include "ns3/core-module.h"
 #include "ns3/mobility-module.h"
@@ -27,7 +21,9 @@ std::map<std::pair<int, int>, bool> finished;
 std::map<int, std::set<int>> satToGsMap;
 std::set<int> gsStarted;
 std::set<int> satFinished;
-std::set<int> satBusy;  // 追蹤哪些衛星正在接收資料
+
+std::map<int, std::queue<std::pair<int, int>>> satTaskQueue;
+std::set<int> satBusy;
 
 static void EchoRx(std::string context, const Ptr< const Packet > packet, const TcpHeader &header, const Ptr< const TcpSocketBase > socket);
 void SendPacket(int gsId, int satId);
@@ -43,7 +39,6 @@ static void EchoRx(std::string context, const Ptr< const Packet > packet, const 
 
   Ptr<PacketSink> sink = satellites.Get(satId)->GetApplication(0)->GetObject<PacketSink>();
   if (sink->GetTotalRx() >= 125000) {
-    // 找出哪個地面站的傳輸完成了
     for (const auto &entry : finished) {
       int gsId = entry.first.first;
       int sid = entry.first.second;
@@ -58,10 +53,6 @@ static void EchoRx(std::string context, const Ptr< const Packet > packet, const 
       }
     }
 
-    // 釋放衛星（標記為非忙碌）
-    satBusy.erase(satId);
-
-    // 檢查衛星是否已完成所有傳輸
     bool allDone = true;
     for (int gsId : satToGsMap[satId]) {
       std::pair<int, int> key = std::make_pair(gsId, satId);
@@ -77,22 +68,23 @@ static void EchoRx(std::string context, const Ptr< const Packet > packet, const 
       log.close();
       satFinished.insert(satId);
     }
-
-    // 找出下一個需要開始傳輸的地面站（選擇ID最小的）
-    int nextGsId = -1;
-    for (int gsId : satToGsMap[satId]) {
-      std::pair<int, int> key = std::make_pair(gsId, satId);
-      if (gsStarted.count(gsId) == 0 && !finished[key]) {
-        if (nextGsId == -1 || gsId < nextGsId) {
-          nextGsId = gsId;
-        }
-      }
-    }
     
-    // 如果找到下一個地面站，安排傳輸
-    if (nextGsId != -1) {
-      gsStarted.insert(nextGsId);
-      Simulator::Schedule(Seconds(0.1), &SendPacket, nextGsId, satId);
+    if(!satTaskQueue[satId].empty()){
+      auto [nextGsId, nextSatId] = satTaskQueue[satId].front();
+      satTaskQueue[satId].pop();
+      Simulator::ScheduleNow(&SendPacket, nextGsId, nextSatId);
+    }else{
+      satBusy.erase(satId);
+    }
+
+    for (const auto &entry : finished) {
+      int gsId = entry.first.first;
+      int sid = entry.first.second;
+      if (gsStarted.count(gsId) == 0 && sid == satId) {
+        gsStarted.insert(gsId);
+        Simulator::Schedule(Simulator::Now(), &SendPacket, gsId, sid);
+        break;
+      }
     }
   }
 }
@@ -100,9 +92,6 @@ static void EchoRx(std::string context, const Ptr< const Packet > packet, const 
 
 void SendPacket(int gsId, int satId){
   // Task 2.1: Complete this function
-  // 標記衛星為忙碌狀態
-  satBusy.insert(satId);
-  
   Ptr<Node> sender = groundStations.Get(gsId);           
   Ptr<Node> receiver = satellites.Get(satId);             
 
@@ -125,6 +114,7 @@ void SendPacket(int gsId, int satId){
 }
 
 
+
 string GetNodeId(string str) {
   // Which node
   size_t pos1 = str.find("/", 0);           // The first "/"
@@ -141,10 +131,11 @@ NS_LOG_COMPONENT_DEFINE ("Lab4");
 
 int main(int argc, char *argv[]){
 	
-  // 清空日誌文件
   std::ofstream("send_time.log", std::ios::trunc).close();
   std::ofstream("recv_time.log", std::ios::trunc).close();
   std::ofstream("collection_time.log", std::ios::trunc).close();
+  
+  
 
   CommandLine cmd;
   string constellation = "TelesatGateway";
@@ -208,7 +199,7 @@ int main(int argc, char *argv[]){
 
   // Receiver: satellites
   PacketSinkHelper sink("ns3::TcpSocketFactory", InetSocketAddress(Ipv4Address::GetAny(), port));
-  for(uint32_t i=0; i<satellites.GetN(); i++){
+  for(int i=0; i<60; i++){
     sinkApps.Add(sink.Install(satellites.Get(i)));
   }
 
@@ -222,7 +213,7 @@ int main(int argc, char *argv[]){
   int src, dst;
   std::vector<std::pair<int, int>> sendTasks;
   std::string line;
-  std::getline(infile, line); // 跳過第一行
+  std::getline(infile, line); 
   
   while (infile >> src >> dst) {
     sendTasks.emplace_back(src, dst);
@@ -231,19 +222,19 @@ int main(int argc, char *argv[]){
   }
   infile.close();
 
-  // Task 2.2: 修正初始化排程
-  // 每個衛星只安排一個地面站（ID最小的）開始傳送
-  std::map<int, int> satToSmallestGs;
+
+  // Task 2.2: Call SendPacket()
   for (auto [gsId, satId] : sendTasks) {
-    if (satToSmallestGs.find(satId) == satToSmallestGs.end() || 
-        gsId < satToSmallestGs[satId]) {
-      satToSmallestGs[satId] = gsId;
-    }
+    satTaskQueue[satId].push({gsId, satId});
   }
   
-  for (auto [satId, gsId] : satToSmallestGs) {
-    gsStarted.insert(gsId);
-    Simulator::Schedule(Seconds(0.0), &SendPacket, gsId, satId);
+  for (auto [satId, queue] : satTaskQueue) {
+    if (!queue.empty()) {
+      auto [gsId, sid] = queue.front();
+      queue.pop();
+      satBusy.insert(satId);
+      Simulator::Schedule(Simulator::Now(), &SendPacket, gsId, sid);
+    }
   }
 
   Simulator::Schedule(Seconds(1e-7), &Connect);
@@ -251,6 +242,7 @@ int main(int argc, char *argv[]){
   Simulator::Run ();
   Simulator::Destroy ();
 
+  // Task 4: Output File
   // Task 4: Output File
   std::ofstream out(outputFile);
   if (!out.is_open()) {
@@ -299,28 +291,27 @@ int main(int argc, char *argv[]){
   
   // 輸出格式
   out << totalCollectionTime << "\n";
-  
-  // 衛星資訊（升冪排序）
-  for (uint32_t satId = 0; satId < satellites.GetN(); ++satId) {
-    double time = satCollectionTime.count(satId) ? satCollectionTime[satId] : 0.0;
-    out << satId << " " << time << "\n";
-  }
-  
   out << "\n";
-  
-  // 地面站資訊（升冪排序）
-  std::vector<int> gsIds;
-  for (auto &[gsId, _] : txStart) {
-    gsIds.push_back(gsId);
+  // 衛星資訊（升冪排序）
+  for(int satId = 0; satId < 10; ++satId){
+    if (satCollectionTime.count(satId)){
+      out << satId << " " << satCollectionTime[satId] << "\n";
+    }
+    else out << satId << " 0" << "\n";
   }
-  std::sort(gsIds.begin(), gsIds.end());
-  
-  for (int gsId : gsIds) {
-    out << gsId << " " << txStart[gsId] << " " << rxEnd[gsId] << "\n";
+  //for (auto &[satId, time] : satCollectionTime) {
+  //  out << satId << " " << time << "\n";
+  //}
+  out << "\n";
+  // 地面站資訊（升冪排序）
+  for (auto &[gsId, startTime] : txStart) {
+    out << gsId << " " << startTime << " " << rxEnd[gsId] << "\n";
   }
   
   out.close();
   std::cout << "Output written to " << outputFile << std::endl;
+
+
 
   return 0;
 }
