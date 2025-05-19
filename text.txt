@@ -1,167 +1,169 @@
-#include <bits/stdc++.h>
-#include "ortools/linear_solver/linear_solver.h"
-using namespace std;
-using namespace operations_research;
-
-const string STUDENT_ID = "111550005";  // 改成自己的學號
-
-int main() {
-    ios::sync_with_stdio(false);
-    cin.tie(nullptr);
-
-    int T;
-    cin >> T;
-    // 先印學號
-    cout << STUDENT_ID << "\n";
-
-    for (int tc = 0; tc < T; ++tc) {
-        int N, E, F;
-        cin >> N >> E >> F;
-
-        // 讀入 SD pairs
-        vector<int> src(F), dst(F);
-        for (int i = 0; i < F; ++i) {
-            cin >> src[i] >> dst[i];
-        }
-
-        // 讀入邊與容量
-        // 我們將 graph 看成有向圖
-        map<pair<int,int>, double> capacity;
-        vector<pair<int,int>> edges;
-        for (int i = 0; i < E; ++i) {
-            int u, v;
-            double c;
-            cin >> u >> v >> c;
-            // 加入雙向，但視作兩條獨立邊
-            capacity[{u, v}] = c;
-            capacity[{v, u}] = c;
-            edges.emplace_back(u, v);
-            edges.emplace_back(v, u);
-        }
-
-        // 建 solver
-        MPSolver solver("lab5", MPSolver::CBC_MIXED_INTEGER_PROGRAMMING);
-
-        // 變數 x[f][u→v]：flow f 是否走過 u→v
-        // 變數 y[u→v]：是否有任何 flow 經過 u→v
-        map<tuple<int,int,int>, MPVariable*> x;
-        map<pair<int,int>, MPVariable*> y;
-        for (int f = 0; f < F; ++f) {
-            for (auto &e : edges) {
-                int u = e.first, v = e.second;
-                x[{f,u,v}] = solver.MakeBoolVar(
-                    "x_f" + to_string(f) + "_" + to_string(u) + "_" + to_string(v));
-            }
-        }
-        for (auto &e : edges) {
-            int u = e.first, v = e.second;
-            y[{u,v}] = solver.MakeBoolVar(
-                "y_" + to_string(u) + "_" + to_string(v));
-        }
-
-        // 1. Y-Z binding：約束： ∀f,u,v: x[f][u→v] ≤ y[u→v]
-        for (int f = 0; f < F; ++f) {
-            for (auto &e : edges) {
-                int u = e.first, v = e.second;
-                solver.Add(x[{f,u,v}] <= y[{u,v}]);
-            }
-        }
-        // 也要 y[u→v] ≤ Σ_f x[f][u→v]
-        for (auto &e : edges) {
-            int u = e.first, v = e.second;
-            LinearExpr sum_x = 0;
-            for (int f = 0; f < F; ++f) {
-                sum_x += x[{f,u,v}];
-            }
-            solver.Add(y[{u,v}] * F >= sum_x);
-        }
-
-        // 2. 單一 transmitter per node: ∀u: Σ_{v} y[u→v] ≤ 1
-        for (int u = 0; u < N; ++u) {
-            LinearExpr out_sum = 0;
-            for (auto &e : edges) {
-                if (e.first == u) out_sum += y[e];
-            }
-            solver.Add(out_sum <= 1);
-        }
-        // 3. 單一 receiver per node: ∀v: Σ_{u} y[u→v] ≤ 1
-        for (int v = 0; v < N; ++v) {
-            LinearExpr in_sum = 0;
-            for (auto &e : edges) {
-                if (e.second == v) in_sum += y[e];
-            }
-            solver.Add(in_sum <= 1);
-        }
-
-        // 4. Flow conservation & single-path:
-        //    ∀f, for node k not src[f], not dst[f]: Σ_in x = Σ_out x
-        for (int f = 0; f < F; ++f) {
-            for (int k = 0; k < N; ++k) {
-                if (k == src[f] || k == dst[f]) continue;
-                LinearExpr in_sum = 0, out_sum = 0;
-                for (auto &e : edges) {
-                    if (e.second == k) in_sum += x[{f,e.first,e.second}];
-                    if (e.first  == k) out_sum += x[{f,e.first,e.second}];
-                }
-                solver.Add(in_sum == out_sum);
-            }
-            // ∀f: Σ_out from src[f] - Σ_in to src[f] = f_flow
-            //      Σ_in to dst[f] - Σ_out from dst[f] = f_flow
-            LinearExpr src_out = 0, src_in = 0, dst_out = 0, dst_in = 0;
-            for (auto &e : edges) {
-                if (e.first  == src[f]) src_out += x[{f,e.first,e.second}];
-                if (e.second == src[f]) src_in  += x[{f,e.first,e.second}];
-                if (e.second == dst[f]) dst_in  += x[{f,e.first,e.second}];
-                if (e.first  == dst[f]) dst_out += x[{f,e.first,e.second}];
-            }
-            // 定義每個 flow 的 throughput 為一個 continuous var
-            auto f_flow = solver.MakeNumVar(0.0, solver.infinity(), "flow_" + to_string(f));
-            solver.Add(src_out - src_in == f_flow);
-            solver.Add(dst_in  - dst_out == f_flow);
-        }
-
-        // 5. Link capacity: ∀(u→v): Σ_f x[f][u→v] * f_flow ≤ capacity[u→v]
-        for (auto &e : edges) {
-            int u = e.first, v = e.second;
-            LinearExpr cap_sum = 0;
-            for (int f = 0; f < F; ++f) {
-                // flow f 的 throughput var
-                auto f_flow = solver.LookupVariableOrNull("flow_" + to_string(f));
-                cap_sum += x[{f,u,v}] * f_flow;
-            }
-            solver.Add(cap_sum <= capacity[{u,v}]);
-        }
-
-        // 目標：最大化 Σ_f f_flow
-        LinearExpr obj = 0;
-        for (int f = 0; f < F; ++f) {
-            obj += *solver.LookupVariableOrNull("flow_" + to_string(f));
-        }
-        solver.Minimize(-obj);  // Minimize -Σ = Maximize Σ
-
-        // 解
-        const MPSolver::ResultStatus result = solver.Solve();
-        if (result != MPSolver::OPTIMAL) {
-            cerr << "No optimal solution found for test " << tc << "\n";
-        }
-
-        // 輸出每個 flow 的 throughput
-        double total = 0;
-        for (int f = 0; f < F; ++f) {
-            double v = solver.LookupVariableOrNull("flow_" + to_string(f))->solution_value();
-            cout << fixed << setprecision(6) << v << (f+1<F ? " " : "\n");
-            total += v;
-        }
-        // 可選：也可以輸出 y 變數，用來 debug
-        // for (auto &e : edges) {
-        //   if (y[e]->solution_value() > 0.5)
-        //     cout << "(" << e.first << "->" << e.second << ") ";
-        // }
-        // cout << "\n";
-
-        // 總吞吐量（若 report 需要可以累加）
-        // all_total += total;
-    }
-
-    return 0;
-}
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc: In function ‘int main()’:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:66:24: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+   66 |                 solver.Add(x[{f,u,v}] <= y[{u,v}]);
+      |                        ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:72:32: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+   72 |             LinearExpr sum_x = 0;
+      |                                ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:76:20: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+   76 |             solver.Add(y[{u,v}] * F >= sum_x);
+      |                    ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:76:33: error: invalid operands of types ‘std::map<std::pair<int, int>, operations_research::MPVariable*>::mapped_type’ {aka ‘operations_research::MPVariable*’} and ‘int’ to binary ‘operator*’
+   76 |             solver.Add(y[{u,v}] * F >= sum_x);
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:81:34: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+   81 |             LinearExpr out_sum = 0;
+      |                                  ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:85:20: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+   85 |             solver.Add(out_sum <= 1);
+      |                    ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:89:33: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+   89 |             LinearExpr in_sum = 0;
+      |                                 ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:93:20: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+   93 |             solver.Add(in_sum <= 1);
+      |                    ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:101:37: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  101 |                 LinearExpr in_sum = 0, out_sum = 0;
+      |                                     ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:101:50: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  101 |                 LinearExpr in_sum = 0, out_sum = 0;
+      |                                                  ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:106:24: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+  106 |                 solver.Add(in_sum == out_sum);
+      |                        ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:110:34: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  110 |             LinearExpr src_out = 0, src_in = 0, dst_out = 0, dst_in = 0;
+      |                                  ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:110:46: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  110 |             LinearExpr src_out = 0, src_in = 0, dst_out = 0, dst_in = 0;
+      |                                              ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:110:59: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  110 |             LinearExpr src_out = 0, src_in = 0, dst_out = 0, dst_in = 0;
+      |                                                           ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:110:71: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  110 |             LinearExpr src_out = 0, src_in = 0, dst_out = 0, dst_in = 0;
+      |                                                                       ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:119:20: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+  119 |             solver.Add(src_out - src_in == f_flow);
+      |                    ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:120:20: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+  120 |             solver.Add(dst_in  - dst_out == f_flow);
+      |                    ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:126:34: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  126 |             LinearExpr cap_sum = 0;
+      |                                  ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:130:39: error: invalid operands of types ‘std::map<std::tuple<int, int, int>, operations_research::MPVariable*>::mapped_type’ {aka ‘operations_research::MPVariable*’} and ‘operations_research::MPVariable*’ to binary ‘operator*’
+  130 |                 cap_sum += x[{f,u,v}] * f_flow;
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:132:20: error: ‘class operations_research::MPSolver’ has no member named ‘Add’
+  132 |             solver.Add(cap_sum <= capacity[{u,v}]);
+      |                    ^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:136:26: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
+  136 |         LinearExpr obj = 0;
+      |                          ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:138:17: error: no match for ‘operator+=’ (operand types are ‘operations_research::LinearExpr’ and ‘operations_research::MPVariable’)
+  138 |             obj += *solver.LookupVariableOrNull("flow_" + to_string(f));
+      |             ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:136:15: note: candidate: ‘operations_research::LinearExpr& operations_research::LinearExpr::operator+=(const operations_research::LinearExpr&)’
+  136 |   LinearExpr& operator+=(const LinearExpr& rhs);
+      |               ^~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:136:44: note:   no known conversion for argument 1 from ‘operations_research::MPVariable’ to ‘const operations_research::LinearExpr&’
+  136 |   LinearExpr& operator+=(const LinearExpr& rhs);
+      |                          ~~~~~~~~~~~~~~~~~~^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:140:16: error: ‘class operations_research::MPSolver’ has no member named ‘Minimize’
+  140 |         solver.Minimize(-obj);  // Minimize -Σ = Maximize Σ
+      |                ^~~~~~~~
+gmake[2]: *** [BasicExample/CMakeFiles/BasicExample.dir/build.make:76: BasicExample/CMakeFiles/BasicExample.dir/src/lab5_ortools.cc.o] Error 1
+gmake[2]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
+gmake[1]: *** [CMakeFiles/Makefile2:11562: BasicExample/CMakeFiles/BasicExample.dir/all] Error 2
+gmake[1]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
+gmake: *** [Makefile:166: all] Error 2
