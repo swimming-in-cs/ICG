@@ -1,5 +1,6 @@
 #include <bits/stdc++.h>
 #include "ortools/linear_solver/linear_solver.h"
+#include "absl/time/time.h"
 using namespace std;
 using namespace operations_research;
 
@@ -7,11 +8,12 @@ int main() {
   ios::sync_with_stdio(false);
   cin.tie(nullptr);
 
-  // print student ID
+  // Print student ID
   string student_id = "111550005";
   cout << student_id << "\n";
 
-  int T; cin >> T;
+  int T;
+  cin >> T;
   vector<double> throughputs(T);
 
   for (int tc = 0; tc < T; ++tc) {
@@ -19,18 +21,22 @@ int main() {
     cin >> U >> E >> F;
     int N = U;
 
+    // Read edges and capacities
     vector<pair<int,int>> edges;
-    vector<vector<int>> adj(N);
     vector<double> cap;
-    edges.reserve(E * 2);
-    cap.reserve(E * 2);
+    vector<vector<int>> adj(N);
+    edges.reserve(2*E);
+    cap.reserve(2*E);
     for (int i = 0; i < E; ++i) {
-      int u, v; double r;
+      int u, v;
+      double r;
       cin >> u >> v >> r;
-      // add both directions
-      edges.emplace_back(u, v); cap.push_back(r);
-      edges.emplace_back(v, u); cap.push_back(r);
-      adj[u].push_back(edges.size()-2);
+      // directed copies
+      edges.emplace_back(u, v);
+      cap.push_back(r);
+      adj[u].push_back(edges.size()-1);
+      edges.emplace_back(v, u);
+      cap.push_back(r);
       adj[v].push_back(edges.size()-1);
     }
 
@@ -38,101 +44,104 @@ int main() {
     for (int i = 0; i < F; ++i) cin >> src[i] >> dst[i];
 
     // Create MIP solver
-    MPSolver* solver = MPSolver::CreateSolver("CBC");
+    std::unique_ptr<MPSolver> solver(MPSolver::CreateSolver("CBC"));
     const double INF = solver->infinity();
 
-    // Variables: flow amount f[i]
+    // Variables: flow amounts
     vector<MPVariable*> f(F);
     for (int i = 0; i < F; ++i) {
       f[i] = solver->MakeNumVar(0.0, INF, "f_" + to_string(i));
     }
-    // Variables: x[i][e] binary, use edge e for flow i
-    vector<vector<MPVariable*>> x(F);
+    // Variables: x[i][e]
+    vector<vector<MPVariable*>> x(F, vector<MPVariable*>(edges.size()));
     for (int i = 0; i < F; ++i) {
-      x[i].resize(edges.size());
       for (int e = 0; e < (int)edges.size(); ++e) {
         x[i][e] = solver->MakeBoolVar("x_" + to_string(i) + "_" + to_string(e));
       }
     }
 
-    // Objective: maximize sum of f[i]
+    // Objective: maximize sum of flows
     MPObjective* obj = solver->MutableObjective();
     for (int i = 0; i < F; ++i) obj->SetCoefficient(f[i], 1);
     obj->SetMaximization();
 
-    // Constraints:
-    // 1) Capacity: f[i] <= cap[e] * x[i][e] for all i,e
+    // 1) Capacity: f[i] - cap[e]*x[i][e] <= 0
     for (int i = 0; i < F; ++i) {
       for (int e = 0; e < (int)edges.size(); ++e) {
-        solver->MakeRowConstraint(f[i] <= cap[e] * x[i][e]);
+        MPConstraint* ct = solver->MakeRowConstraint(-INF, 0.0);
+        ct->SetCoefficient(f[i], 1);
+        ct->SetCoefficient(x[i][e], -cap[e]);
       }
-    }
-    // 2) Flow conservation: for each i, each node j: sum_e out - sum_e in = b
-    for (int i = 0; i < F; ++i) {
-      for (int j = 0; j < N; ++j) {
-        LinearExpr expr;
-        for (int eid : adj[j]) expr += x[i][eid];  // outgoing
-        for (int e = 0; e < (int)edges.size(); ++e) {
-          if (edges[e].second == j) expr -= x[i][e];  // incoming
-        }
-        double rhs = 0;
-        if (j == src[i]) rhs = 1;
-        else if (j == dst[i]) rhs = -1;
-        solver->MakeRowConstraint(expr == rhs);
-      }
-    }
-    // 3) Node degree: each node u has at most one outgoing edge overall
-    for (int u = 0; u < N; ++u) {
-      LinearExpr expr_out, expr_in;
-      for (int i = 0; i < F; ++i) {
-        for (int eid : adj[u]) expr_out += x[i][eid];
-      }
-      solver->MakeRowConstraint(expr_out <= 1);
-      // at most one incoming
-      for (int i = 0; i < F; ++i) {
-        for (int e = 0; e < (int)edges.size(); ++e) {
-          if (edges[e].second == u) expr_in += x[i][e];
-        }
-      }
-      solver->MakeRowConstraint(expr_in <= 1);
     }
 
+    // 2) Flow conservation: sum_out - sum_in = b
+    for (int i = 0; i < F; ++i) {
+      for (int u = 0; u < N; ++u) {
+        MPConstraint* ct = solver->MakeRowConstraint(
+            (u == src[i] ? 1.0 : (u == dst[i] ? -1.0 : 0.0)),
+            (u == src[i] ? 1.0 : (u == dst[i] ? -1.0 : 0.0)));
+        // outgoing
+        for (int eid : adj[u]) ct->SetCoefficient(x[i][eid], 1);
+        // incoming
+        for (int e = 0; e < (int)edges.size(); ++e) {
+          if (edges[e].second == u) ct->SetCoefficient(x[i][e], -1);
+        }
+      }
+    }
+
+    // 3) Node degree: each node has at most one outgoing and one incoming overall
+    for (int u = 0; u < N; ++u) {
+      // outgoing
+      MPConstraint* cout = solver->MakeRowConstraint(0.0, 1.0);
+      for (int i = 0; i < F; ++i) {
+        for (int eid : adj[u]) cout->SetCoefficient(x[i][eid], 1);
+      }
+      // incoming
+      MPConstraint* cin_ = solver->MakeRowConstraint(0.0, 1.0);
+      for (int i = 0; i < F; ++i) {
+        for (int e = 0; e < (int)edges.size(); ++e) {
+          if (edges[e].second == u) cin_->SetCoefficient(x[i][e], 1);
+        }
+      }
+    }
+
+    // Time limit: 10 seconds
+    solver->SetTimeLimit(absl::Milliseconds(10000));
+
     // Solve
-    solver->SetTimeLimit(10000);  // ms
-    auto result_status = solver->Solve();
-    if (result_status != MPSOLVER_OPTIMAL && result_status != MPSOLVER_FEASIBLE) {
-      cerr << "No solution found\n";
+    const MPSolver::ResultStatus status = solver->Solve();
+    if (status != MPSolver::OPTIMAL && status != MPSolver::FEASIBLE) {
+      cerr << "No solution" << endl;
       return 0;
     }
 
     // Extract solution
-    vector<double> flow_val(F);
-    vector<vector<int>> used_edges_list;
     set<pair<int,int>> used_dir;
-    for (int i = 0; i < F; ++i) flow_val[i] = f[i]->solution_value();
+    vector<double> flow_val(F, 0.0);
     for (int i = 0; i < F; ++i) {
+      flow_val[i] = f[i]->solution_value();
+      if (flow_val[i] < 1e-9) continue;
       for (int e = 0; e < (int)edges.size(); ++e) {
-        if (x[i][e]->solution_value() > 0.5) {
-          used_dir.insert(edges[e]);
-        }
+        if (x[i][e]->solution_value() > 0.5) used_dir.insert(edges[e]);
       }
     }
-    // Build path for each flow
+
+    // Reconstruct paths via BFS
     vector<vector<int>> flow_path(F);
     for (int i = 0; i < F; ++i) {
       if (flow_val[i] < 1e-9) continue;
-      // BFS from src to dst
-      queue<int> q; q.push(src[i]);
       vector<int> prev(N, -1);
+      queue<int> q;
       prev[src[i]] = src[i];
+      q.push(src[i]);
       while (!q.empty()) {
         int u = q.front(); q.pop();
         if (u == dst[i]) break;
         for (int eid : adj[u]) {
-          auto pr = edges[eid];
-          if (pr.first == u && used_dir.count(pr) && prev[pr.second] == -1) {
-            prev[pr.second] = u;
-            q.push(pr.second);
+          auto [a, b] = edges[eid];
+          if (a == u && used_dir.count({a,b}) && prev[b] == -1) {
+            prev[b] = u;
+            q.push(b);
           }
         }
       }
@@ -146,9 +155,10 @@ int main() {
     }
 
     // Output used directed edges
-    vector<pair<int,int>> used_list(used_dir.begin(), used_dir.end());
-    cout << used_list.size() << "\n";
-    for (auto &e : used_list) cout << e.first << " " << e.second << "\n";
+    cout << used_dir.size() << "\n";
+    for (auto &e : used_dir) cout << e.first << " " << e.second << "\n";
+
+    // Output flows
     cout << fixed << setprecision(6);
     double sum_tp = 0;
     for (int i = 0; i < F; ++i) {
@@ -164,8 +174,9 @@ int main() {
     }
     cout << sum_tp << "\n";
     throughputs[tc] = sum_tp;
-    delete solver;
   }
+
+  // Average throughput
   double avg = accumulate(throughputs.begin(), throughputs.end(), 0.0) / T;
   cout << fixed << setprecision(6) << avg << "\n";
   return 0;
