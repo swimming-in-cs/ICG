@@ -42,29 +42,28 @@ int main() {
                      MPSolver::CBC_MIXED_INTEGER_PROGRAMMING);
 
     // Decision variables
-    // x[k][e]: binary, path uses edge e for SD pair k
     std::vector<std::vector<const MPVariable*>> x(F, std::vector<const MPVariable*>(M));
-    for (int k = 0; k < F; ++k)
-      for (int e = 0; e < M; ++e)
+    for (int k = 0; k < F; ++k) {
+      for (int e = 0; e < M; ++e) {
         x[k][e] = solver.MakeBoolVar("x_" + std::to_string(k) + "_" + std::to_string(e));
-
-    // y[e]: binary, if edge e is constructed
+      }
+    }
     std::vector<const MPVariable*> y(M);
-    for (int e = 0; e < M; ++e)
+    for (int e = 0; e < M; ++e) {
       y[e] = solver.MakeBoolVar("y_" + std::to_string(e));
-
-    // f[k]: continuous throughput for SD pair k
+    }
     std::vector<const MPVariable*> f(F);
-    for (int k = 0; k < F; ++k)
+    for (int k = 0; k < F; ++k) {
       f[k] = solver.MakeNumVar(0.0, solver.infinity(), "f_" + std::to_string(k));
-
-    // f_ke[k][e]: continuous flow of pair k on edge e
+    }
     std::vector<std::vector<const MPVariable*>> f_ke(
         F, std::vector<const MPVariable*>(M));
-    for (int k = 0; k < F; ++k)
-      for (int e = 0; e < M; ++e)
+    for (int k = 0; k < F; ++k) {
+      for (int e = 0; e < M; ++e) {
         f_ke[k][e] = solver.MakeNumVar(0.0, solver.infinity(),
                                        "fke_" + std::to_string(k) + "_" + std::to_string(e));
+      }
+    }
 
     // 1) Flow conservation on x for each SD pair
     for (int k = 0; k < F; ++k) {
@@ -79,32 +78,40 @@ int main() {
     }
 
     // 2) Link activation: x[k][e] <= y[e]
-    for (int k = 0; k < F; ++k)
-      for (int e = 0; e < M; ++e)
-        solver.MakeRowConstraint(-solver.infinity(), 0.0)
-            ->SetCoefficient(x[k][e], 1)
-            ->SetCoefficient(y[e], -1);
+    for (int k = 0; k < F; ++k) {
+      for (int e = 0; e < M; ++e) {
+        MPConstraint* ct = solver.MakeRowConstraint(-solver.infinity(), 0.0);
+        ct->SetCoefficient(x[k][e], 1);
+        ct->SetCoefficient(y[e], -1);
+      }
+    }
 
     // 3) Linearize f_ke = f_k * x_k_e
-    //    f_ke <= r_e * x_ke
-    for (int k = 0; k < F; ++k)
-      for (int e = 0; e < M; ++e)
-        solver.MakeRowConstraint(-solver.infinity(), dir_edges[e].cap)
-            ->SetCoefficient(f_ke[k][e], 1)
-            ->SetCoefficient(x[k][e], -dir_edges[e].cap);
-    //    f_ke <= f[k]
-    for (int k = 0; k < F; ++k)
-      for (int e = 0; e < M; ++e)
-        solver.MakeRowConstraint(-solver.infinity(), 0.0)
-            ->SetCoefficient(f_ke[k][e], 1)
-            ->SetCoefficient(f[k], -1);
-    //    f_ke >= f[k] - M*(1-x)
-    for (int k = 0; k < F; ++k)
-      for (int e = 0; e < M; ++e)
-        solver.MakeRowConstraint(-max_cap, solver.infinity())
-            ->SetCoefficient(f_ke[k][e], 1)
-            ->SetCoefficient(f[k], -1)
-            ->SetCoefficient(x[k][e], max_cap);
+    //    3a) f_ke <= r_e * x
+    for (int k = 0; k < F; ++k) {
+      for (int e = 0; e < M; ++e) {
+        MPConstraint* ct = solver.MakeRowConstraint(-solver.infinity(), dir_edges[e].cap);
+        ct->SetCoefficient(f_ke[k][e], 1);
+        ct->SetCoefficient(x[k][e], -dir_edges[e].cap);
+      }
+    }
+    //    3b) f_ke <= f[k]
+    for (int k = 0; k < F; ++k) {
+      for (int e = 0; e < M; ++e) {
+        MPConstraint* ct = solver.MakeRowConstraint(-solver.infinity(), 0.0);
+        ct->SetCoefficient(f_ke[k][e], 1);
+        ct->SetCoefficient(f[k], -1);
+      }
+    }
+    //    3c) f_ke >= f[k] - M*(1-x)
+    for (int k = 0; k < F; ++k) {
+      for (int e = 0; e < M; ++e) {
+        MPConstraint* ct = solver.MakeRowConstraint(-max_cap, solver.infinity());
+        ct->SetCoefficient(f_ke[k][e], 1);
+        ct->SetCoefficient(f[k], -1);
+        ct->SetCoefficient(x[k][e], max_cap);
+      }
+    }
 
     // 4) Edge capacity: sum_k f_ke[k][e] <= r_e
     for (int e = 0; e < M; ++e) {
@@ -113,11 +120,12 @@ int main() {
     }
 
     // 5) Throughput definition: f[k] <= sum_e f_ke[k][e]
-    // Actually, maximize f[k], so this ties f[k] to its used edges.
     for (int k = 0; k < F; ++k) {
       MPConstraint* ct = solver.MakeRowConstraint(0.0, solver.infinity());
       ct->SetCoefficient(f[k], 1);
-      for (int e = 0; e < M; ++e) ct->SetCoefficient(f_ke[k][e], -1);
+      for (int e = 0; e < M; ++e) {
+        ct->SetCoefficient(f_ke[k][e], -1);
+      }
     }
 
     // Objective: maximize sum_k f[k]
@@ -148,12 +156,11 @@ int main() {
         std::cout << "0 0" << std::endl;
       } else {
         total_tc += rate;
-        // Reconstruct path via x[k][e]
         std::vector<int> path;
         int cur = src[k]; path.push_back(cur);
         while (cur != dst[k]) {
           for (int e = 0; e < M; ++e) {
-            if (dir_edges[e].u==cur && x[k][e]->solution_value()>0.5) {
+            if (dir_edges[e].u == cur && x[k][e]->solution_value() > 0.5) {
               cur = dir_edges[e].v;
               path.push_back(cur);
               break;
