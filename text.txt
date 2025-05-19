@@ -1,160 +1,212 @@
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc: In function ‘int main()’:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:121:42: error: no match for ‘operator=’ (operand types are ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’} and ‘operations_research::sat::BoolVar’)
-  121 |             y_vars[e] = model.NewBoolVar();
-      |                                          ^
-In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:14:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note: candidate: ‘constexpr operations_research::sat::IntVar& operations_research::sat::IntVar::operator=(const operations_research::sat::IntVar&)’
-  145 | class IntVar {
-      |       ^~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note:   no known conversion for argument 1 from ‘operations_research::sat::BoolVar’ to ‘const operations_research::sat::IntVar&’
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note: candidate: ‘constexpr operations_research::sat::IntVar& operations_research::sat::IntVar::operator=(operations_research::sat::IntVar&&)’
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note:   no known conversion for argument 1 from ‘operations_research::sat::BoolVar’ to ‘operations_research::sat::IntVar&&’
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:132:49: error: no match for ‘operator=’ (operand types are ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’} and ‘operations_research::sat::BoolVar’)
-  132 |                 x_vars[k][e] = model.NewBoolVar();
-      |                                                 ^
-In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:14:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note: candidate: ‘constexpr operations_research::sat::IntVar& operations_research::sat::IntVar::operator=(const operations_research::sat::IntVar&)’
-  145 | class IntVar {
-      |       ^~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note:   no known conversion for argument 1 from ‘operations_research::sat::BoolVar’ to ‘const operations_research::sat::IntVar&’
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note: candidate: ‘constexpr operations_research::sat::IntVar& operations_research::sat::IntVar::operator=(operations_research::sat::IntVar&&)’
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:145:7: note:   no known conversion for argument 1 from ‘operations_research::sat::BoolVar’ to ‘operations_research::sat::IntVar&&’
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:74: error: no match for ‘operator*’ (operand types are ‘operations_research::sat::LinearExpr’ and ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’})
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-In file included from /usr/include/c++/11/ccomplex:39,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:54,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/complex:392:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator*(const std::complex<_Tp>&, const std::complex<_Tp>&)’
-  392 |     operator*(const complex<_Tp>& __x, const complex<_Tp>& __y)
-      |     ^~~~~~~~
-/usr/include/c++/11/complex:392:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘operations_research::sat::LinearExpr’ is not derived from ‘const std::complex<_Tp>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/c++/11/ccomplex:39,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:54,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/complex:401:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator*(const std::complex<_Tp>&, const _Tp&)’
-  401 |     operator*(const complex<_Tp>& __x, const _Tp& __y)
-      |     ^~~~~~~~
-/usr/include/c++/11/complex:401:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘operations_research::sat::LinearExpr’ is not derived from ‘const std::complex<_Tp>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/c++/11/ccomplex:39,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:54,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/complex:410:5: note: candidate: ‘template<class _Tp> std::complex<_Tp> std::operator*(const _Tp&, const std::complex<_Tp>&)’
-  410 |     operator*(const _Tp& __x, const complex<_Tp>& __y)
-      |     ^~~~~~~~
-/usr/include/c++/11/complex:410:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’} is not derived from ‘const std::complex<_Tp>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/c++/11/valarray:603,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/bits/valarray_after.h:407:5: note: candidate: ‘template<class _Dom1, class _Dom2> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_Expr, std::_Expr, _Dom1, _Dom2>, typename std::__fun<std::__multiplies, typename _Dom1::value_type>::result_type> std::operator*(const std::_Expr<_Dom1, typename _Dom1::value_type>&, const std::_Expr<_Dom2, typename _Dom2::value_type>&)’
-  407 |     _DEFINE_EXPR_BINARY_OPERATOR(*, struct std::__multiplies)
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/bits/valarray_after.h:407:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘operations_research::sat::LinearExpr’ is not derived from ‘const std::_Expr<_Dom1, typename _Dom1::value_type>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/c++/11/valarray:603,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/bits/valarray_after.h:407:5: note: candidate: ‘template<class _Dom> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_Expr, std::_Constant, _Dom, typename _Dom::value_type>, typename std::__fun<std::__multiplies, typename _Dom1::value_type>::result_type> std::operator*(const std::_Expr<_Dom1, typename _Dom1::value_type>&, const typename _Dom::value_type&)’
-  407 |     _DEFINE_EXPR_BINARY_OPERATOR(*, struct std::__multiplies)
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/bits/valarray_after.h:407:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘operations_research::sat::LinearExpr’ is not derived from ‘const std::_Expr<_Dom1, typename _Dom1::value_type>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/c++/11/valarray:603,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/bits/valarray_after.h:407:5: note: candidate: ‘template<class _Dom> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_Constant, std::_Expr, typename _Dom::value_type, _Dom>, typename std::__fun<std::__multiplies, typename _Dom1::value_type>::result_type> std::operator*(const typename _Dom::value_type&, const std::_Expr<_Dom1, typename _Dom1::value_type>&)’
-  407 |     _DEFINE_EXPR_BINARY_OPERATOR(*, struct std::__multiplies)
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/bits/valarray_after.h:407:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’} is not derived from ‘const std::_Expr<_Dom1, typename _Dom1::value_type>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/c++/11/valarray:603,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/bits/valarray_after.h:407:5: note: candidate: ‘template<class _Dom> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_Expr, std::_ValArray, _Dom, typename _Dom::value_type>, typename std::__fun<std::__multiplies, typename _Dom1::value_type>::result_type> std::operator*(const std::_Expr<_Dom1, typename _Dom1::value_type>&, const std::valarray<typename _Dom::value_type>&)’
-  407 |     _DEFINE_EXPR_BINARY_OPERATOR(*, struct std::__multiplies)
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/bits/valarray_after.h:407:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘operations_research::sat::LinearExpr’ is not derived from ‘const std::_Expr<_Dom1, typename _Dom1::value_type>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/c++/11/valarray:603,
-                 from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/bits/valarray_after.h:407:5: note: candidate: ‘template<class _Dom> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_ValArray, std::_Expr, typename _Dom::value_type, _Dom>, typename std::__fun<std::__multiplies, typename _Dom1::value_type>::result_type> std::operator*(const std::valarray<typename _Dom::value_type>&, const std::_Expr<_Dom1, typename _Dom1::value_type>&)’
-  407 |     _DEFINE_EXPR_BINARY_OPERATOR(*, struct std::__multiplies)
-      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/bits/valarray_after.h:407:5: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’} is not derived from ‘const std::_Expr<_Dom1, typename _Dom1::value_type>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/valarray:1188:1: note: candidate: ‘template<class _Tp> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_ValArray, std::_ValArray, _Tp, _Tp>, typename std::__fun<std::__multiplies, _Tp>::result_type> std::operator*(const std::valarray<_Tp>&, const std::valarray<_Tp>&)’
- 1188 | _DEFINE_BINARY_OPERATOR(*, __multiplies)
-      | ^~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/valarray:1188:1: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘operations_research::sat::LinearExpr’ is not derived from ‘const std::valarray<_Tp>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/valarray:1188:1: note: candidate: ‘template<class _Tp> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_ValArray, std::_Constant, _Tp, _Tp>, typename std::__fun<std::__multiplies, _Tp>::result_type> std::operator*(const std::valarray<_Tp>&, const typename std::valarray<_Tp>::value_type&)’
- 1188 | _DEFINE_BINARY_OPERATOR(*, __multiplies)
-      | ^~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/valarray:1188:1: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘operations_research::sat::LinearExpr’ is not derived from ‘const std::valarray<_Tp>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /usr/include/x86_64-linux-gnu/c++/11/bits/stdc++.h:95,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:13:
-/usr/include/c++/11/valarray:1188:1: note: candidate: ‘template<class _Tp> std::_Expr<std::__detail::_BinClos<std::__multiplies, std::_Constant, std::_ValArray, _Tp, _Tp>, typename std::__fun<std::__multiplies, _Tp>::result_type> std::operator*(const typename std::valarray<_Tp>::value_type&, const std::valarray<_Tp>&)’
- 1188 | _DEFINE_BINARY_OPERATOR(*, __multiplies)
-      | ^~~~~~~~~~~~~~~~~~~~~~~
-/usr/include/c++/11/valarray:1188:1: note:   template argument deduction/substitution failed:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:159:84: note:   ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’} is not derived from ‘const std::valarray<_Tp>’
-  159 |                     model.AddEquality(out_expr - in_expr, LinearExpr(-1) * R_vars[k]);
-      |                                                                                    ^
-In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:14:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1223:19: note: candidate: ‘operations_research::sat::LinearExpr operations_research::sat::operator*(operations_research::sat::LinearExpr, int64_t)’
- 1223 | inline LinearExpr operator*(LinearExpr expr, int64_t factor) {
-      |                   ^~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1223:54: note:   no known conversion for argument 2 from ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::sat::IntVar>, operations_research::sat::IntVar>::value_type’ {aka ‘operations_research::sat::IntVar’} to ‘int64_t’ {aka ‘long int’}
- 1223 | inline LinearExpr operator*(LinearExpr expr, int64_t factor) {
-      |                                              ~~~~~~~~^~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1227:19: note: candidate: ‘operations_research::sat::LinearExpr operations_research::sat::operator*(int64_t, operations_research::sat::LinearExpr)’
- 1227 | inline LinearExpr operator*(int64_t factor, LinearExpr expr) {
-      |                   ^~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1227:37: note:   no known conversion for argument 1 from ‘operations_research::sat::LinearExpr’ to ‘int64_t’ {aka ‘long int’}
- 1227 | inline LinearExpr operator*(int64_t factor, LinearExpr expr) {
-      |                             ~~~~~~~~^~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1308:25: note: candidate: ‘operations_research::sat::DoubleLinearExpr operations_research::sat::operator*(operations_research::sat::DoubleLinearExpr, double)’
- 1308 | inline DoubleLinearExpr operator*(DoubleLinearExpr expr, double factor) {
-      |                         ^~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1308:52: note:   no known conversion for argument 1 from ‘operations_research::sat::LinearExpr’ to ‘operations_research::sat::DoubleLinearExpr’
- 1308 | inline DoubleLinearExpr operator*(DoubleLinearExpr expr, double factor) {
-      |                                   ~~~~~~~~~~~~~~~~~^~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1313:25: note: candidate: ‘operations_research::sat::DoubleLinearExpr operations_research::sat::operator*(double, operations_research::sat::DoubleLinearExpr)’
- 1313 | inline DoubleLinearExpr operator*(double factor, DoubleLinearExpr expr) {
-      |                         ^~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/sat/cp_model.h:1313:42: note:   no known conversion for argument 1 from ‘operations_research::sat::LinearExpr’ to ‘double’
- 1313 | inline DoubleLinearExpr operator*(double factor, DoubleLinearExpr expr) {
-      |                                   ~~~~~~~^~~~~~
-gmake[2]: *** [BasicExample/CMakeFiles/BasicExample.dir/build.make:76: BasicExample/CMakeFiles/BasicExample.dir/src/lab5_ortools.cc.o] Error 1
-gmake[2]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
-gmake[1]: *** [CMakeFiles/Makefile2:11562: BasicExample/CMakeFiles/BasicExample.dir/all] Error 2
-gmake[1]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
-gmake: *** [Makefile:166: all] Error 2
+//  ╔════════════════════════════════════════════════════════════════════╗
+//  ║  Lab 5 – OR‑Tools CP‑SAT exact solver (max‑throughput single‑path)║
+//  ║  —  generated by ChatGPT, 2025‑05‑20                             ║
+//  ║                                                                  ║
+//  ║  Compile (example):                                              ║
+//  ║    g++ -std=c++17 -O2 -I/path/to/ortools/include \
+//  ║        lab5_ortools.cc -L/path/to/ortools/lib -lortools -lglog   ║
+//  ║                                                                  ║
+//  ║  **Important**: replace STUDENT_ID with your real ID before      ║
+//  ║  submitting to the judge.                                        ║
+//  ╚════════════════════════════════════════════════════════════════════╝
+
+#include <bits/stdc++.h>
+#include "ortools/sat/cp_model.h"
+
+using namespace std;
+using namespace operations_research;
+using namespace operations_research::sat;
+
+// ──────────────────────────────────────────────────────────────────────
+// Parameters & types
+// ──────────────────────────────────────────────────────────────────────
+static constexpr long long SCALE = 1'000'000;           // 6‑digit fixed‑point ⇢ 1e‑6 precision
+static const string STUDENT_ID   = "YOUR_STUDENT_ID";   // ←←  ！！改成你的學號！！
+
+struct DirEdge {
+    int from, to;          // 0‑based indices
+    long long cap;         // integer capacity (= real * SCALE)
+};
+
+// ──────────────────────────────────────────────────────────────────────
+// Helper: reconstruct path for SD‑pair k from chosen x‑variables
+// ──────────────────────────────────────────────────────────────────────
+static vector<int> ReconstructPath(int n, int src, int dst,
+                                   const vector<vector<int>>& out_edges_of_node,
+                                   const vector<DirEdge>& edges,
+                                   const vector<BoolVar>& x_vec,
+                                   const CpSolverResponse& resp) {
+    vector<int> path; path.reserve(n);
+    if (src == dst) { path.push_back(src); return path; }
+    unordered_set<int> visited;
+    int cur = src; path.push_back(cur); visited.insert(cur);
+    while (cur != dst) {
+        bool moved = false;
+        for (int eid : out_edges_of_node[cur]) {
+            if (SolutionBooleanValue(resp, x_vec[eid])) {
+                int nxt = edges[eid].to;
+                if (visited.count(nxt)) return {}; // loop – invalid
+                path.push_back(nxt);
+                cur = nxt;
+                visited.insert(cur);
+                moved = true;
+                break;
+            }
+        }
+        if (!moved) return {}; // dead‑end – invalid
+    }
+    return path;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+int main() {
+    ios::sync_with_stdio(false);
+    cin.tie(nullptr);
+
+    int T; if (!(cin >> T)) return 0;
+
+    cout << STUDENT_ID << '\n';
+    long double total_throughput_all_tests = 0.0L;
+
+    for (int tc = 0; tc < T; ++tc) {
+        int N, E, F; cin >> N >> E >> F;
+
+        struct UEdge { int u, v; long double cap; };
+        vector<UEdge> undirected(E);
+        long double max_cap_real = 0.0L;
+        for (int i = 0; i < E; ++i) {
+            int u, v; long double r; cin >> u >> v >> r; --u; --v;
+            undirected[i] = {u, v, r};
+            max_cap_real = max(max_cap_real, r);
+        }
+
+        vector<pair<int, int>> sd(F);
+        for (int k = 0; k < F; ++k) {
+            int s, d; cin >> s >> d; --s; --d;
+            sd[k] = {s, d};
+        }
+
+        // construct both directions for each undirected edge
+        vector<DirEdge> dir_edges; dir_edges.reserve(2 * E);
+        vector<vector<int>> out_edges_of_node(N), in_edges_of_node(N);
+        for (auto &e : undirected) {
+            long long cap_int = static_cast<long long>(llround(e.cap * SCALE));
+            int id_fwd = dir_edges.size();
+            dir_edges.push_back({e.u, e.v, cap_int});
+            out_edges_of_node[e.u].push_back(id_fwd);
+            in_edges_of_node [e.v].push_back(id_fwd);
+
+            int id_rev = dir_edges.size();
+            dir_edges.push_back({e.v, e.u, cap_int});
+            out_edges_of_node[e.v].push_back(id_rev);
+            in_edges_of_node [e.u].push_back(id_rev);
+        }
+        const int M = dir_edges.size();
+        const long long R_MAX_INT = static_cast<long long>(llround(max_cap_real * SCALE));
+
+        // ───────────────────── CP‑SAT model ─────────────────────
+        CpModelBuilder model;
+
+        // y[e] – Bool
+        vector<BoolVar> y_vars(M);
+        for (int e = 0; e < M; ++e) y_vars[e] = model.NewBoolVar();
+
+        // x[k][e] – Bool, f[k][e] – Int, R[k] – Int
+        vector<vector<BoolVar>> x_vars(F, vector<BoolVar>(M));
+        vector<vector<IntVar>>  f_vars(F, vector<IntVar>(M));
+        vector<IntVar>          R_vars(F);
+
+        for (int k = 0; k < F; ++k) {
+            R_vars[k] = model.NewIntVar(Domain(0, R_MAX_INT));
+            for (int e = 0; e < M; ++e) {
+                x_vars[k][e] = model.NewBoolVar();
+                f_vars[k][e] = model.NewIntVar(Domain(0, dir_edges[e].cap));
+                // f ≤ cap * x
+                model.AddLessOrEqual(f_vars[k][e], LinearExpr(x_vars[k][e]) * dir_edges[e].cap);
+                // link must be constructed if used
+                model.AddLessOrEqual(x_vars[k][e], y_vars[e]);
+            }
+        }
+
+        // (1) capacity on each directed edge
+        for (int e = 0; e < M; ++e) {
+            LinearExpr total_on_e;
+            for (int k = 0; k < F; ++k) total_on_e += f_vars[k][e];
+            model.AddLessOrEqual(total_on_e, dir_edges[e].cap);
+        }
+
+        // (2) flow conservation per SD pair
+        for (int k = 0; k < F; ++k) {
+            int s = sd[k].first;
+            int d = sd[k].second;
+            for (int v = 0; v < N; ++v) {
+                LinearExpr out_expr, in_expr;
+                for (int eid : out_edges_of_node[v]) out_expr += f_vars[k][eid];
+                for (int eid :  in_edges_of_node[v]) in_expr  += f_vars[k][eid];
+                if (v == s)      model.AddEquality(out_expr - in_expr, R_vars[k]);
+                else if (v == d) model.AddEquality(out_expr - in_expr, LinearExpr(R_vars[k]) * (-1));
+                else             model.AddEquality(out_expr - in_expr, 0);
+            }
+        }
+
+        // (3) transmitter / receiver limit: each node ≤ 1 outgoing / incoming y
+        for (int v = 0; v < N; ++v) {
+            LinearExpr sum_out, sum_in;
+            for (int eid : out_edges_of_node[v]) sum_out += y_vars[eid];
+            for (int eid :  in_edges_of_node[v]) sum_in  += y_vars[eid];
+            model.AddLessOrEqual(sum_out, 1);
+            model.AddLessOrEqual(sum_in , 1);
+        }
+
+        // Objective: maximize Σ R_k
+        LinearExpr objective;
+        for (auto &R : R_vars) objective += R;
+        model.Maximize(objective);
+
+        // ───── Solver parameters ─────
+        Model m;
+        SatParameters params;
+        params.set_num_search_workers(max(1, (int)thread::hardware_concurrency()));
+        params.set_max_time_in_seconds(0.95); // ≤ 1 s as per statement
+        m.Add(NewSatParameters(params));
+
+        CpSolverResponse resp = SolveCpModel(model.Build(), &m);
+
+        // ───────────────────── Output ─────────────────────
+        vector<pair<int, int>> used_links;
+        for (int e = 0; e < M; ++e) if (SolutionBooleanValue(resp, y_vars[e]))
+            used_links.push_back({dir_edges[e].from, dir_edges[e].to});
+
+        cout << used_links.size() << '\n';
+        for (auto [u, v] : used_links) cout << (u + 1) << ' ' << (v + 1) << '\n';
+
+        long double throughput_this_test = 0.0L;
+        cout.setf(ios::fixed); cout << setprecision(6);
+
+        for (int k = 0; k < F; ++k) {
+            long long R_int = (resp.status() == CpSolverStatus::OPTIMAL || resp.status() == CpSolverStatus::FEASIBLE)
+                                ? SolutionIntegerValue(resp, R_vars[k]) : 0;
+            if (R_int == 0) { cout << "0 0\n"; continue; }
+
+            vector<int> path = ReconstructPath(N, sd[k].first, sd[k].second,
+                                               out_edges_of_node, dir_edges,
+                                               x_vars[k], resp);
+            if (path.empty()) { cout << "0 0\n"; continue; }
+
+            long double R_real = (long double)R_int / SCALE;
+            throughput_this_test += R_real;
+
+            cout << R_real << ' ' << path.size();
+            for (int v : path) cout << ' ' << (v + 1);
+            cout << '\n';
+        }
+
+        cout << throughput_this_test << '\n';
+        total_throughput_all_tests += throughput_this_test;
+    }
+
+    cout.setf(ios::fixed); cout << setprecision(6);
+    cout << (total_throughput_all_tests / T) << '\n';
+
+    return 0;
+}
