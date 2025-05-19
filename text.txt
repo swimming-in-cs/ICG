@@ -173,40 +173,55 @@ int main() {
         CpSolverResponse resp = SolveCpModel(model.Build(), &m);
 
         // ───────────────────── Output ─────────────────────
-        vector<pair<int, int>> used_links;
-        for (int e = 0; e < M; ++e) if (SolutionBooleanValue(resp, y_vars[e]))
-            used_links.push_back({dir_edges[e].from, dir_edges[e].to});
+        const bool feasible = (resp.status() == CpSolverStatus::OPTIMAL ||
+                               resp.status() == CpSolverStatus::FEASIBLE);
 
-        cout << used_links.size() << '\n';
-        for (auto [u, v] : used_links) cout << (u + 1) << ' ' << (v + 1) << '\n';
+        vector<pair<int, int>> used_links;
+        if (feasible) {
+            for (int e = 0; e < M; ++e) if (SolutionBooleanValue(resp, y_vars[e]))
+                used_links.push_back({dir_edges[e].from, dir_edges[e].to});
+        }
+
+        cout << used_links.size() << '
+';
+        for (auto [u, v] : used_links) cout << (u + 1) << ' ' << (v + 1) << '
+';
 
         long double throughput_this_test = 0.0L;
         cout.setf(ios::fixed); cout << setprecision(6);
 
         for (int k = 0; k < F; ++k) {
-            long long R_int = (resp.status() == CpSolverStatus::OPTIMAL || resp.status() == CpSolverStatus::FEASIBLE)
-                                ? SolutionIntegerValue(resp, R_vars[k]) : 0;
-            if (R_int == 0) { cout << "0 0\n"; continue; }
+            if (!feasible) { cout << "0 0
+"; continue; }
+
+            long long R_int = SolutionIntegerValue(resp, R_vars[k]);
+            if (R_int == 0) { cout << "0 0
+"; continue; }
 
             vector<int> path = ReconstructPath(N, sd[k].first, sd[k].second,
                                                out_edges_of_node, dir_edges,
                                                x_vars[k], resp);
-            if (path.empty()) { cout << "0 0\n"; continue; }
+            if (path.empty()) { // should not happen, but be safe
+                cout << "0 0
+"; continue; }
 
-            long double R_real = (long double)R_int / SCALE;
+            long double R_real = static_cast<long double>(R_int) / SCALE;
             throughput_this_test += R_real;
 
             cout << R_real << ' ' << path.size();
             for (int v : path) cout << ' ' << (v + 1);
-            cout << '\n';
+            cout << '
+';
         }
 
-        cout << throughput_this_test << '\n';
+        cout << throughput_this_test << '
+';
         total_throughput_all_tests += throughput_this_test;
     }
 
     cout.setf(ios::fixed); cout << setprecision(6);
-    cout << (total_throughput_all_tests / T) << '\n';
+    cout << (total_throughput_all_tests / T) << '
+';
 
     return 0;
 }
