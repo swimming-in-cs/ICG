@@ -1,295 +1,485 @@
-#include <iostream>
-#include <vector>
-#include <map>
-#include <unordered_map>
-#include <set>
-#include <algorithm>
-#include <climits>
-#include <queue>
-#include <iomanip>
-#include <ortools/linear_solver/linear_solver.h>
-
-using namespace std;
-using namespace operations_research;
-
-// Structure to represent an undirected edge in the network
-struct UndirectedEdge {
-    int u, v;
-    double capacity;
-    UndirectedEdge(int _u, int _v, double _c) : u(_u), v(_v), capacity(_c) {}
-};
-
-// Structure to represent a source-destination (SD) pair
-struct SDPair {
-    int src, dst;
-    SDPair(int s, int d) : src(s), dst(d) {}
-};
-
-// Function to reconstruct path from source to destination using the y variables
-vector<int> reconstructPath(const vector<vector<double>>& y_values, int src, int dst, 
-                          const vector<pair<int, int>>& directed_edges, int n) {
-    vector<int> path;
-    path.push_back(src);
-    
-    int current = src;
-    while (current != dst) {
-        bool found = false;
-        for (size_t e = 0; e < directed_edges.size(); e++) {
-            if (directed_edges[e].first == current && y_values[e] > 0.5) {
-                current = directed_edges[e].second;
-                path.push_back(current);
-                found = true;
-                break;
-            }
-        }
-        if (!found) break; // No path found (shouldn't happen if solution is feasible)
-    }
-    
-    return path;
-}
-
-// Your student ID
-const string STUDENT_ID = "PUT_YOUR_STUDENT_ID_HERE";
-
-int main() {
-    int t; // Number of test cases
-    cin >> t;
-    
-    // Print student ID
-    cout << STUDENT_ID << endl;
-    
-    double total_throughput = 0.0;
-    
-    for (int test_case = 0; test_case < t; test_case++) {
-        // Step 1: Parse input for this test case
-        int n, m, k;
-        cin >> n >> m >> k;
-        
-        // Read undirected edges
-        vector<UndirectedEdge> undirected_edges;
-        for (int i = 0; i < m; i++) {
-            int u, v;
-            double capacity;
-            cin >> u >> v >> capacity;
-            undirected_edges.push_back(UndirectedEdge(u, v, capacity));
-        }
-        
-        // Read source-destination pairs
-        vector<SDPair> sd_pairs;
-        for (int i = 0; i < k; i++) {
-            int src, dst;
-            cin >> src >> dst;
-            sd_pairs.push_back(SDPair(src, dst));
-        }
-        
-        // Create potential directed edges from undirected edges
-        vector<pair<int, int>> directed_edges;
-        unordered_map<int, unordered_map<int, int>> edge_index;
-        unordered_map<int, unordered_map<int, double>> edge_capacity;
-        
-        for (const auto& edge : undirected_edges) {
-            // Add both directions
-            directed_edges.push_back({edge.u, edge.v});
-            edge_index[edge.u][edge.v] = directed_edges.size() - 1;
-            edge_capacity[edge.u][edge.v] = edge.capacity;
-            
-            directed_edges.push_back({edge.v, edge.u});
-            edge_index[edge.v][edge.u] = directed_edges.size() - 1;
-            edge_capacity[edge.v][edge.u] = edge.capacity;
-        }
-        
-        int num_directed_edges = directed_edges.size();
-        
-        // Step 2: Set up the solver
-        unique_ptr<MPSolver> solver(MPSolver::CreateSolver("SCIP"));
-        if (!solver) {
-            cerr << "SCIP solver not available." << endl;
-            return 1;
-        }
-        
-        // Define decision variables
-        
-        // y[f][e]: whether SD pair f uses directed edge e
-        vector<vector<MPVariable*>> y(k, vector<MPVariable*>(num_directed_edges));
-        for (int f = 0; f < k; f++) {
-            for (int e = 0; e < num_directed_edges; e++) {
-                y[f][e] = solver->MakeIntVar(0, 1, "y_" + to_string(f) + "_" + to_string(e));
-            }
-        }
-        
-        // z[e]: whether directed edge e is used by any SD pair
-        vector<MPVariable*> z(num_directed_edges);
-        for (int e = 0; e < num_directed_edges; e++) {
-            z[e] = solver->MakeIntVar(0, 1, "z_" + to_string(e));
-        }
-        
-        // x[f]: traffic amount for SD pair f
-        vector<MPVariable*> x(k);
-        for (int f = 0; f < k; f++) {
-            x[f] = solver->MakeNumVar(0, solver->infinity(), "x_" + to_string(f));
-        }
-        
-        // Step 3: Add constraints
-        
-        // Flow conservation constraint
-        for (int f = 0; f < k; f++) {
-            for (int node = 0; node < n; node++) {
-                MPConstraint* flow_constraint = solver->MakeRowConstraint(0, 0);
-                
-                // Source node: outgoing - incoming = 1
-                if (node == sd_pairs[f].src) {
-                    flow_constraint->SetBounds(1, 1);
-                }
-                // Destination node: outgoing - incoming = -1
-                else if (node == sd_pairs[f].dst) {
-                    flow_constraint->SetBounds(-1, -1);
-                }
-                // Intermediate node: outgoing - incoming = 0
-                
-                // Add outgoing edges
-                for (int e = 0; e < num_directed_edges; e++) {
-                    if (directed_edges[e].first == node) {
-                        flow_constraint->SetCoefficient(y[f][e], 1);
-                    }
-                }
-                
-                // Subtract incoming edges
-                for (int e = 0; e < num_directed_edges; e++) {
-                    if (directed_edges[e].second == node) {
-                        flow_constraint->SetCoefficient(y[f][e], -1);
-                    }
-                }
-            }
-        }
-        
-        // Link capacity constraint
-        for (int e = 0; e < num_directed_edges; e++) {
-            int u = directed_edges[e].first;
-            int v = directed_edges[e].second;
-            double capacity = edge_capacity[u][v];
-            
-            MPConstraint* capacity_constraint = solver->MakeRowConstraint(0, capacity);
-            for (int f = 0; f < k; f++) {
-                capacity_constraint->SetCoefficient(y[f][e], x[f]);
-            }
-        }
-        
-        // Task 1: Add the following three constraints:
-        
-        // 1. Y-Z binding constraint: z[e] = 1 if edge e is used by any SD pair
-        for (int e = 0; e < num_directed_edges; e++) {
-            for (int f = 0; f < k; f++) {
-                // If y[f][e] = 1, then z[e] must be at least 1
-                MPConstraint* binding_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
-                binding_constraint->SetCoefficient(y[f][e], 1);
-                binding_constraint->SetCoefficient(z[e], -1);
-            }
-            
-            // Sum of y[f][e] across all f should be <= k * z[e]
-            MPConstraint* sum_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
-            for (int f = 0; f < k; f++) {
-                sum_constraint->SetCoefficient(y[f][e], 1);
-            }
-            sum_constraint->SetCoefficient(z[e], -k);
-        }
-        
-        // 2. Single transmitter per node constraint
-        for (int node = 0; node < n; node++) {
-            MPConstraint* out_constraint = solver->MakeRowConstraint(0, 1);
-            for (int e = 0; e < num_directed_edges; e++) {
-                if (directed_edges[e].first == node) {
-                    out_constraint->SetCoefficient(z[e], 1);
-                }
-            }
-        }
-        
-        // 3. Single receiver per node constraint
-        for (int node = 0; node < n; node++) {
-            MPConstraint* in_constraint = solver->MakeRowConstraint(0, 1);
-            for (int e = 0; e < num_directed_edges; e++) {
-                if (directed_edges[e].second == node) {
-                    in_constraint->SetCoefficient(z[e], 1);
-                }
-            }
-        }
-        
-        // Step 4: Set objective function - maximize total throughput
-        MPObjective* objective = solver->MutableObjective();
-        for (int f = 0; f < k; f++) {
-            objective->SetCoefficient(x[f], 1);
-        }
-        objective->SetMaximization();
-        
-        // Step 5: Solve
-        const MPSolver::ResultStatus result_status = solver->Solve();
-        
-        // Step 6: Process results
-        if (result_status == MPSolver::OPTIMAL || result_status == MPSolver::FEASIBLE) {
-            // Count used directed links
-            vector<pair<int, int>> used_links;
-            for (int e = 0; e < num_directed_edges; e++) {
-                if (z[e]->solution_value() > 0.5) {
-                    used_links.push_back(directed_edges[e]);
-                }
-            }
-            
-            // Output number of used directed links
-            cout << used_links.size() << endl;
-            
-            // Output used directed links
-            for (const auto& link : used_links) {
-                cout << link.first << " " << link.second << endl;
-            }
-            
-            // Store y values for path reconstruction
-            vector<vector<double>> y_values(k, vector<double>(num_directed_edges));
-            for (int f = 0; f < k; f++) {
-                for (int e = 0; e < num_directed_edges; e++) {
-                    y_values[f][e] = y[f][e]->solution_value();
-                }
-            }
-            
-            // Calculate total throughput for this test case
-            double test_case_throughput = 0;
-            
-            // Output SD pair information
-            for (int f = 0; f < k; f++) {
-                double flow = x[f]->solution_value();
-                test_case_throughput += flow;
-                
-                if (flow > 0) {
-                    // Reconstruct path
-                    vector<int> path = reconstructPath(y_values[f], sd_pairs[f].src, sd_pairs[f].dst, directed_edges, n);
-                    
-                    // Output flow, path length, and path
-                    cout << fixed << setprecision(6) << flow << " " << path.size();
-                    for (int node : path) {
-                        cout << " " << node;
-                    }
-                    cout << endl;
-                } else {
-                    // No flow for this SD pair
-                    cout << "0 0" << endl;
-                }
-            }
-            
-            // Output total throughput for this test case
-            cout << fixed << setprecision(6) << test_case_throughput << endl;
-            
-            // Add to overall throughput
-            total_throughput += test_case_throughput;
-        } else {
-            // No solution found for this test case
-            cout << "0" << endl;  // No used links
-            for (int f = 0; f < k; f++) {
-                cout << "0 0" << endl;  // No flow for any SD pair
-            }
-            cout << "0" << endl;  // Total throughput is 0
-        }
-    }
-    
-    // Output average throughput across all test cases
-    cout << fixed << setprecision(6) << total_throughput / t << endl;
-    
-    return 0;
-}
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc: In function ‘std::vector<int> reconstructPath(const std::vector<std::vector<double> >&, int, int, const std::vector<std::pair<int, int> >&, int)’:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:67: error: no match for ‘operator>’ (operand types are ‘const value_type’ {aka ‘const std::vector<double>’} and ‘double’)
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+In file included from /usr/include/c++/11/bits/stl_algobase.h:64,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/ios:40,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/stl_pair.h:502:5: note: candidate: ‘template<class _T1, class _T2> constexpr bool std::operator>(const std::pair<_T1, _T2>&, const std::pair<_T1, _T2>&)’
+  502 |     operator>(const pair<_T1, _T2>& __x, const pair<_T1, _T2>& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_pair.h:502:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::pair<_T1, _T2>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/ios:40,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/stl_iterator.h:438:5: note: candidate: ‘template<class _Iterator> constexpr bool std::operator>(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_Iterator>&)’
+  438 |     operator>(const reverse_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:438:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::reverse_iterator<_Iterator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/ios:40,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/stl_iterator.h:477:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr bool std::operator>(const std::reverse_iterator<_Iterator>&, const std::reverse_iterator<_IteratorR>&)’
+  477 |     operator>(const reverse_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:477:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::reverse_iterator<_Iterator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/ios:40,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/stl_iterator.h:1627:5: note: candidate: ‘template<class _IteratorL, class _IteratorR> constexpr bool std::operator>(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorR>&)’
+ 1627 |     operator>(const move_iterator<_IteratorL>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:1627:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::move_iterator<_IteratorL>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/ios:40,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/stl_iterator.h:1679:5: note: candidate: ‘template<class _Iterator> constexpr bool std::operator>(const std::move_iterator<_IteratorL>&, const std::move_iterator<_IteratorL>&)’
+ 1679 |     operator>(const move_iterator<_Iterator>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:1679:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::move_iterator<_IteratorL>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/basic_string.h:48,
+                 from /usr/include/c++/11/string:55,
+                 from /usr/include/c++/11/bits/locale_classes.h:40,
+                 from /usr/include/c++/11/bits/ios_base.h:41,
+                 from /usr/include/c++/11/ios:42,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/string_view:608:5: note: candidate: ‘template<class _CharT, class _Traits> constexpr bool std::operator>(std::basic_string_view<_CharT, _Traits>, std::basic_string_view<_CharT, _Traits>)’
+  608 |     operator> (basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/string_view:608:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘std::vector<double>’ is not derived from ‘std::basic_string_view<_CharT, _Traits>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/basic_string.h:48,
+                 from /usr/include/c++/11/string:55,
+                 from /usr/include/c++/11/bits/locale_classes.h:40,
+                 from /usr/include/c++/11/bits/ios_base.h:41,
+                 from /usr/include/c++/11/ios:42,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/string_view:614:5: note: candidate: ‘template<class _CharT, class _Traits> constexpr bool std::operator>(std::basic_string_view<_CharT, _Traits>, std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >)’
+  614 |     operator> (basic_string_view<_CharT, _Traits> __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/string_view:614:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘std::vector<double>’ is not derived from ‘std::basic_string_view<_CharT, _Traits>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/basic_string.h:48,
+                 from /usr/include/c++/11/string:55,
+                 from /usr/include/c++/11/bits/locale_classes.h:40,
+                 from /usr/include/c++/11/bits/ios_base.h:41,
+                 from /usr/include/c++/11/ios:42,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/string_view:621:5: note: candidate: ‘template<class _CharT, class _Traits> constexpr bool std::operator>(std::__type_identity_t<std::basic_string_view<_CharT, _Traits> >, std::basic_string_view<_CharT, _Traits>)’
+  621 |     operator> (__type_identity_t<basic_string_view<_CharT, _Traits>> __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/string_view:621:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘std::basic_string_view<_CharT, _Traits>’ and ‘double’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/string:55,
+                 from /usr/include/c++/11/bits/locale_classes.h:40,
+                 from /usr/include/c++/11/bits/ios_base.h:41,
+                 from /usr/include/c++/11/ios:42,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/basic_string.h:6378:5: note: candidate: ‘template<class _CharT, class _Traits, class _Alloc> bool std::operator>(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)’
+ 6378 |     operator>(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/basic_string.h:6378:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/string:55,
+                 from /usr/include/c++/11/bits/locale_classes.h:40,
+                 from /usr/include/c++/11/bits/ios_base.h:41,
+                 from /usr/include/c++/11/ios:42,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/basic_string.h:6391:5: note: candidate: ‘template<class _CharT, class _Traits, class _Alloc> bool std::operator>(const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&, const _CharT*)’
+ 6391 |     operator>(const basic_string<_CharT, _Traits, _Alloc>& __lhs,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/basic_string.h:6391:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/string:55,
+                 from /usr/include/c++/11/bits/locale_classes.h:40,
+                 from /usr/include/c++/11/bits/ios_base.h:41,
+                 from /usr/include/c++/11/ios:42,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/basic_string.h:6403:5: note: candidate: ‘template<class _CharT, class _Traits, class _Alloc> bool std::operator>(const _CharT*, const std::__cxx11::basic_string<_CharT, _Traits, _Allocator>&)’
+ 6403 |     operator>(const _CharT* __lhs,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/basic_string.h:6403:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘const _CharT*’ and ‘std::vector<double>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/vector:67,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/usr/include/c++/11/bits/stl_vector.h:1943:5: note: candidate: ‘template<class _Tp, class _Alloc> bool std::operator>(const std::vector<_Tp, _Alloc>&, const std::vector<_Tp, _Alloc>&)’
+ 1943 |     operator>(const vector<_Tp, _Alloc>& __x, const vector<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_vector.h:1943:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘const std::vector<_Tp, _Alloc>’ and ‘double’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/tuple:39,
+                 from /usr/include/c++/11/bits/stl_map.h:63,
+                 from /usr/include/c++/11/map:61,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:3:
+/usr/include/c++/11/array:320:5: note: candidate: ‘template<class _Tp, long unsigned int _Nm> bool std::operator>(const std::array<_Tp, _Nm>&, const std::array<_Tp, _Nm>&)’
+  320 |     operator>(const array<_Tp, _Nm>& __one, const array<_Tp, _Nm>& __two)
+      |     ^~~~~~~~
+/usr/include/c++/11/array:320:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::array<_Tp, _Nm>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/stl_map.h:63,
+                 from /usr/include/c++/11/map:61,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:3:
+/usr/include/c++/11/tuple:1585:5: note: candidate: ‘template<class ... _TElements, class ... _UElements> constexpr bool std::operator>(const std::tuple<_Tps ...>&, const std::tuple<_Args2 ...>&)’
+ 1585 |     operator>(const tuple<_TElements...>& __t,
+      |     ^~~~~~~~
+/usr/include/c++/11/tuple:1585:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::tuple<_Tps ...>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/map:61,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:3:
+/usr/include/c++/11/bits/stl_map.h:1515:5: note: candidate: ‘template<class _Key, class _Tp, class _Compare, class _Alloc> bool std::operator>(const std::map<_Key, _Tp, _Compare, _Allocator>&, const std::map<_Key, _Tp, _Compare, _Allocator>&)’
+ 1515 |     operator>(const map<_Key, _Tp, _Compare, _Alloc>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_map.h:1515:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::map<_Key, _Tp, _Compare, _Allocator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/map:62,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:3:
+/usr/include/c++/11/bits/stl_multimap.h:1180:5: note: candidate: ‘template<class _Key, class _Tp, class _Compare, class _Alloc> bool std::operator>(const std::multimap<_Key, _Tp, _Compare, _Allocator>&, const std::multimap<_Key, _Tp, _Compare, _Allocator>&)’
+ 1180 |     operator>(const multimap<_Key, _Tp, _Compare, _Alloc>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_multimap.h:1180:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::multimap<_Key, _Tp, _Compare, _Allocator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/set:61,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:5:
+/usr/include/c++/11/bits/stl_set.h:1037:5: note: candidate: ‘template<class _Key, class _Compare, class _Alloc> bool std::operator>(const std::set<_Key, _Compare, _Allocator>&, const std::set<_Key, _Compare, _Allocator>&)’
+ 1037 |     operator>(const set<_Key, _Compare, _Alloc>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_set.h:1037:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::set<_Key, _Compare, _Allocator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/set:62,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:5:
+/usr/include/c++/11/bits/stl_multiset.h:1023:5: note: candidate: ‘template<class _Key, class _Compare, class _Alloc> bool std::operator>(const std::multiset<_Key, _Compare, _Allocator>&, const std::multiset<_Key, _Compare, _Allocator>&)’
+ 1023 |     operator>(const multiset<_Key,_Compare,_Alloc>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_multiset.h:1023:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::multiset<_Key, _Compare, _Allocator>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/deque:67,
+                 from /usr/include/c++/11/queue:60,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:8:
+/usr/include/c++/11/bits/stl_deque.h:2298:5: note: candidate: ‘template<class _Tp, class _Alloc> bool std::operator>(const std::deque<_Tp, _Alloc>&, const std::deque<_Tp, _Alloc>&)’
+ 2298 |     operator>(const deque<_Tp, _Alloc>& __x, const deque<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_deque.h:2298:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::deque<_Tp, _Alloc>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/queue:64,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:8:
+/usr/include/c++/11/bits/stl_queue.h:374:5: note: candidate: ‘template<class _Tp, class _Seq> bool std::operator>(const std::queue<_Tp, _Seq>&, const std::queue<_Tp, _Seq>&)’
+  374 |     operator>(const queue<_Tp, _Seq>& __x, const queue<_Tp, _Seq>& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_queue.h:374:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::queue<_Tp, _Seq>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/locale_conv.h:41,
+                 from /usr/include/c++/11/locale:43,
+                 from /usr/include/c++/11/iomanip:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:9:
+/usr/include/c++/11/bits/unique_ptr.h:846:5: note: candidate: ‘template<class _Tp, class _Dp, class _Up, class _Ep> bool std::operator>(const std::unique_ptr<_Tp, _Dp>&, const std::unique_ptr<_Up, _Ep>&)’
+  846 |     operator>(const unique_ptr<_Tp, _Dp>& __x,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/unique_ptr.h:846:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::unique_ptr<_Tp, _Dp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/locale_conv.h:41,
+                 from /usr/include/c++/11/locale:43,
+                 from /usr/include/c++/11/iomanip:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:9:
+/usr/include/c++/11/bits/unique_ptr.h:853:5: note: candidate: ‘template<class _Tp, class _Dp> bool std::operator>(const std::unique_ptr<_Tp, _Dp>&, std::nullptr_t)’
+  853 |     operator>(const unique_ptr<_Tp, _Dp>& __x, nullptr_t)
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/unique_ptr.h:853:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::unique_ptr<_Tp, _Dp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/locale_conv.h:41,
+                 from /usr/include/c++/11/locale:43,
+                 from /usr/include/c++/11/iomanip:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:9:
+/usr/include/c++/11/bits/unique_ptr.h:862:5: note: candidate: ‘template<class _Tp, class _Dp> bool std::operator>(std::nullptr_t, const std::unique_ptr<_Tp, _Dp>&)’
+  862 |     operator>(nullptr_t, const unique_ptr<_Tp, _Dp>& __x)
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/unique_ptr.h:862:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘const std::unique_ptr<_Tp, _Dp>’ and ‘double’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/shared_ptr.h:53,
+                 from /usr/include/c++/11/memory:77,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:142,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/shared_ptr_base.h:1500:5: note: candidate: ‘template<class _Tp1, class _Tp2, __gnu_cxx::_Lock_policy _Lp> bool std::operator>(const std::__shared_ptr<_Tp1, _Lp>&, const std::__shared_ptr<_Tp2, _Lp>&)’
+ 1500 |     operator>(const __shared_ptr<_Tp1, _Lp>& __a,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/shared_ptr_base.h:1500:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::__shared_ptr<_Tp1, _Lp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/shared_ptr.h:53,
+                 from /usr/include/c++/11/memory:77,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:142,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/shared_ptr_base.h:1506:5: note: candidate: ‘template<class _Tp, __gnu_cxx::_Lock_policy _Lp> bool std::operator>(const std::__shared_ptr<_Tp, _Lp>&, std::nullptr_t)’
+ 1506 |     operator>(const __shared_ptr<_Tp, _Lp>& __a, nullptr_t) noexcept
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/shared_ptr_base.h:1506:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::__shared_ptr<_Tp, _Lp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/shared_ptr.h:53,
+                 from /usr/include/c++/11/memory:77,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:142,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/shared_ptr_base.h:1511:5: note: candidate: ‘template<class _Tp, __gnu_cxx::_Lock_policy _Lp> bool std::operator>(std::nullptr_t, const std::__shared_ptr<_Tp, _Lp>&)’
+ 1511 |     operator>(nullptr_t, const __shared_ptr<_Tp, _Lp>& __a) noexcept
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/shared_ptr_base.h:1511:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘const std::__shared_ptr<_Tp, _Lp>’ and ‘double’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/memory:77,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:142,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/shared_ptr.h:535:5: note: candidate: ‘template<class _Tp, class _Up> bool std::operator>(const std::shared_ptr<_Tp>&, const std::shared_ptr<_Tp>&)’
+  535 |     operator>(const shared_ptr<_Tp>& __a, const shared_ptr<_Up>& __b) noexcept
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/shared_ptr.h:535:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::shared_ptr<_Tp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/memory:77,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:142,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/shared_ptr.h:541:5: note: candidate: ‘template<class _Tp> bool std::operator>(const std::shared_ptr<_Tp>&, std::nullptr_t)’
+  541 |     operator>(const shared_ptr<_Tp>& __a, nullptr_t) noexcept
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/shared_ptr.h:541:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::shared_ptr<_Tp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/memory:77,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:142,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/shared_ptr.h:547:5: note: candidate: ‘template<class _Tp> bool std::operator>(std::nullptr_t, const std::shared_ptr<_Tp>&)’
+  547 |     operator>(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/shared_ptr.h:547:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘const std::shared_ptr<_Tp>’ and ‘double’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:143,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/optional:1071:5: note: candidate: ‘template<class _Tp, class _Up> constexpr std::__optional_gt_t<_Tp, _Up> std::operator>(const std::optional<_Tp>&, const std::optional<_Up>&)’
+ 1071 |     operator>(const optional<_Tp>& __lhs, const optional<_Up>& __rhs)
+      |     ^~~~~~~~
+/usr/include/c++/11/optional:1071:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::optional<_Tp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:143,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/optional:1141:5: note: candidate: ‘template<class _Tp> constexpr bool std::operator>(const std::optional<_Tp>&, std::nullopt_t)’
+ 1141 |     operator>(const optional<_Tp>& __lhs, nullopt_t) noexcept
+      |     ^~~~~~~~
+/usr/include/c++/11/optional:1141:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::optional<_Tp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:143,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/optional:1146:5: note: candidate: ‘template<class _Tp> constexpr bool std::operator>(std::nullopt_t, const std::optional<_Tp>&)’
+ 1146 |     operator>(nullopt_t, const optional<_Tp>& /* __rhs */) noexcept
+      |     ^~~~~~~~
+/usr/include/c++/11/optional:1146:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘const std::optional<_Tp>’ and ‘double’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:143,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/optional:1209:5: note: candidate: ‘template<class _Tp, class _Up> constexpr std::__optional_gt_t<_Tp, _Up> std::operator>(const std::optional<_Tp>&, const _Up&)’
+ 1209 |     operator>(const optional<_Tp>& __lhs, const _Up& __rhs)
+      |     ^~~~~~~~
+/usr/include/c++/11/optional:1209:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::optional<_Tp>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:143,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/optional:1215:5: note: candidate: ‘template<class _Tp, class _Up> constexpr std::__optional_gt_t<_Up, _Tp> std::operator>(const _Up&, const std::optional<_Tp>&)’
+ 1215 |     operator>(const _Up& __lhs, const optional<_Tp>& __rhs)
+      |     ^~~~~~~~
+/usr/include/c++/11/optional:1215:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   mismatched types ‘const std::optional<_Tp>’ and ‘double’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/forward_list:38,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/internal/hash.h:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/hash.h:85,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/internal/hash_function_defaults.h:56,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/hash_container_defaults.h:19,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/flat_hash_map.h:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:152,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/forward_list.h:1483:5: note: candidate: ‘template<class _Tp, class _Alloc> bool std::operator>(const std::forward_list<_Tp, _Alloc>&, const std::forward_list<_Tp, _Alloc>&)’
+ 1483 |     operator>(const forward_list<_Tp, _Alloc>& __lx,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/forward_list.h:1483:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::forward_list<_Tp, _Alloc>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/list:63,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/internal/hash.h:47,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/hash.h:85,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/internal/hash_function_defaults.h:56,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/hash_container_defaults.h:19,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/flat_hash_map.h:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:152,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/bits/stl_list.h:2098:5: note: candidate: ‘template<class _Tp, class _Alloc> bool std::operator>(const std::__cxx11::list<_Tp, _Alloc>&, const std::__cxx11::list<_Tp, _Alloc>&)’
+ 2098 |     operator>(const list<_Tp, _Alloc>& __x, const list<_Tp, _Alloc>& __y)
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_list.h:2098:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::__cxx11::list<_Tp, _Alloc>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/types/variant.h:50,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/internal/hash.h:69,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/hash.h:85,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/internal/hash_function_defaults.h:56,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/hash_container_defaults.h:19,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/flat_hash_map.h:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:152,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/variant:1235:3: note: candidate: ‘template<class ... _Types> constexpr bool std::operator>(const std::variant<_Types ...>&, const std::variant<_Types ...>&)’
+ 1235 |   _VARIANT_RELATION_FUNCTION_TEMPLATE(>, greater)
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/11/variant:1235:3: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const std::variant<_Types ...>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/ios:40,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/stl_iterator.h:1202:5: note: candidate: ‘template<class _IteratorL, class _IteratorR, class _Container> bool __gnu_cxx::operator>(const __gnu_cxx::__normal_iterator<_IteratorL, _Container>&, const __gnu_cxx::__normal_iterator<_IteratorR, _Container>&)’
+ 1202 |     operator>(const __normal_iterator<_IteratorL, _Container>& __lhs,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:1202:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const __gnu_cxx::__normal_iterator<_IteratorL, _Container>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /usr/include/c++/11/bits/stl_algobase.h:67,
+                 from /usr/include/c++/11/bits/char_traits.h:39,
+                 from /usr/include/c++/11/ios:40,
+                 from /usr/include/c++/11/ostream:38,
+                 from /usr/include/c++/11/iostream:39,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:1:
+/usr/include/c++/11/bits/stl_iterator.h:1210:5: note: candidate: ‘template<class _Iterator, class _Container> bool __gnu_cxx::operator>(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&)’
+ 1210 |     operator>(const __normal_iterator<_Iterator, _Container>& __lhs,
+      |     ^~~~~~~~
+/usr/include/c++/11/bits/stl_iterator.h:1210:5: note:   template argument deduction/substitution failed:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:38:69: note:   ‘const value_type’ {aka ‘const std::vector<double>’} is not derived from ‘const __gnu_cxx::__normal_iterator<_Iterator, _Container>’
+   38 |             if (directed_edges[e].first == current && y_values[e] > 0.5) {
+      |                                                                     ^~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/types/variant.h:50,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/internal/hash.h:69,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/hash/hash.h:85,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/internal/hash_function_defaults.h:56,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/hash_container_defaults.h:19,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/absl-src/absl/container/flat_hash_map.h:43,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:152,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/usr/include/c++/11/variant:1273:18: note: candidate: ‘constexpr bool std::operator>(std::monostate, std::monostate)’
+ 1273 |   constexpr bool operator>(monostate, monostate) noexcept { return false; }
+      |                  ^~~~~~~~
+/usr/include/c++/11/variant:1273:28: note:   no known conversion for argument 1 from ‘const value_type’ {aka ‘const std::vector<double>’} to ‘std::monostate’
+ 1273 |   constexpr bool operator>(monostate, monostate) noexcept { return false; }
+      |                            ^~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc: In function ‘int main()’:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:173:52: error: cannot convert ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::MPVariable*>, operations_research::MPVariable*>::value_type’ {aka ‘operations_research::MPVariable*’} to ‘double’
+  173 |                 capacity_constraint->SetCoefficient(y[f][e], x[f]);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:10:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:1302:53: note:   initializing argument 2 of ‘void operations_research::MPConstraint::SetCoefficient(const operations_research::MPVariable*, double)’
+ 1302 |   void SetCoefficient(const MPVariable* var, double coeff);
+      |                                              ~~~~~~~^~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:262:55: error: invalid initialization of reference of type ‘const std::vector<std::vector<double> >&’ from expression of type ‘__gnu_cxx::__alloc_traits<std::allocator<std::vector<double> >, std::vector<double> >::value_type’ {aka ‘std::vector<double>’}
+  262 |                     vector<int> path = reconstructPath(y_values[f], sd_pairs[f].src, sd_pairs[f].dst, directed_edges, n);
+      |                                        ~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:29:59: note: in passing argument 1 of ‘std::vector<int> reconstructPath(const std::vector<std::vector<double> >&, int, int, const std::vector<std::pair<int, int> >&, int)’
+   29 | vector<int> reconstructPath(const vector<vector<double>>& y_values, int src, int dst,
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+gmake[2]: *** [BasicExample/CMakeFiles/BasicExample.dir/build.make:76: BasicExample/CMakeFiles/BasicExample.dir/src/lab5_ortools.cc.o] Error 1
+gmake[2]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
+gmake[1]: *** [CMakeFiles/Makefile2:11562: BasicExample/CMakeFiles/BasicExample.dir/all] Error 2
+gmake[1]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
+gmake: *** [Makefile:166: all] Error 2
