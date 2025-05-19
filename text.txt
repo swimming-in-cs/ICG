@@ -1,128 +1,165 @@
 #include "ortools/linear_solver/linear_solver.h"
 #include <iostream>
 #include <vector>
-#include <limits>
 #include <string>
+#include <iomanip>
 
 using namespace operations_research;
 
 int main() {
-  // Read input: N=|V|, M=|E|, P=#SD pairs
-  int N, M, P;
-  std::cin >> N >> M >> P;
-  struct Edge { int u, v; double cap; };
-  std::vector<Edge> edges(M);
-  for (int e = 0; e < M; ++e) {
-    std::cin >> edges[e].u >> edges[e].v >> edges[e].cap;
-  }
-  std::vector<int> src(P), dst(P);
-  for (int k = 0; k < P; ++k) {
-    std::cin >> src[k] >> dst[k];
-  }
+  // Replace with your actual student ID
+  const std::string student_id = "YOUR_STUDENT_ID";
 
-  // Create MILP solver (CBC)
-  MPSolver solver("lab5_ortools", MPSolver::CBC_MIXED_INTEGER_PROGRAMMING);
+  int t;
+  if (!(std::cin >> t)) return 0;
+  std::cout << student_id << std::endl;
 
-  // Decision variables:
-  // x[k][e] = 1 if SD pair k uses edge e
-  std::vector<std::vector<const MPVariable*>> x(
-      P, std::vector<const MPVariable*>(M, nullptr));
-  for (int k = 0; k < P; ++k) {
-    for (int e = 0; e < M; ++e) {
-      x[k][e] = solver.MakeBoolVar(
-          "x_" + std::to_string(k) + "_" + std::to_string(e));
+  double sum_throughput = 0.0;
+
+  for (int tc = 0; tc < t; ++tc) {
+    int N, E, F;
+    std::cin >> N >> E >> F;
+    
+    // Read undirected edges and create directed arcs
+    struct Edge { int u, v; double cap; };
+    std::vector<Edge> dir_edges;
+    dir_edges.reserve(E * 2);
+    for (int i = 0; i < E; ++i) {
+      int u, v;
+      double cap;
+      std::cin >> u >> v >> cap;
+      dir_edges.push_back({u, v, cap});
+      dir_edges.push_back({v, u, cap});
     }
-  }
-  // y[e] = 1 if any SD pair uses edge e
-  std::vector<const MPVariable*> y(M, nullptr);
-  for (int e = 0; e < M; ++e) {
-    y[e] = solver.MakeBoolVar("y_" + std::to_string(e));
-  }
-  // f[k] = throughput of SD pair k
-  std::vector<const MPVariable*> f(P, nullptr);
-  for (int k = 0; k < P; ++k) {
-    f[k] = solver.MakeNumVar(0.0, solver.infinity(),
-                             "f_" + std::to_string(k));
-  }
+    int M = dir_edges.size();
 
-  // Constraints:
-  // 1) Flow conservation for each SD pair k (single path) citeturn1file0
-  for (int k = 0; k < P; ++k) {
-    for (int i = 0; i < N; ++i) {
-      double rhs = 0;
-      if (i == src[k]) rhs = 1;
-      if (i == dst[k]) rhs = -1;
-      MPConstraint* ct = solver.MakeRowConstraint(rhs, rhs);
+    // Read SD pairs
+    std::vector<int> src(F), dst(F);
+    for (int k = 0; k < F; ++k) {
+      std::cin >> src[k] >> dst[k];
+    }
+
+    // Build solver
+    MPSolver solver("lab5_mip", MPSolver::CBC_MIXED_INTEGER_PROGRAMMING);
+
+    // Decision variables x[k][e], y[e], f[k]
+    std::vector<std::vector<const MPVariable*>> x(F, std::vector<const MPVariable*>(M));
+    for (int k = 0; k < F; ++k) {
       for (int e = 0; e < M; ++e) {
-        if (edges[e].u == i) ct->SetCoefficient(x[k][e],  1);
-        if (edges[e].v == i) ct->SetCoefficient(x[k][e], -1);
+        x[k][e] = solver.MakeBoolVar("x_" + std::to_string(k) + "_" + std::to_string(e));
       }
     }
-  }
-  // 2) Link capacity: sum_k(f[k] * x[k][e]) <= cap[e] citeturn1file0
-  for (int e = 0; e < M; ++e) {
-    MPConstraint* ct = solver.MakeRowConstraint(0.0, edges[e].cap);
-    for (int k = 0; k < P; ++k) {
-      // enforce f[k] <= cap[e] if x[k][e]==1 via big-M:
-      ct->SetCoefficient(f[k], 1);
-      ct->SetCoefficient(x[k][e], -edges[e].cap);
-    }
-  }
-  // 3) Variable binding: x[k][e] <= y[e] citeturn1file0
-  for (int k = 0; k < P; ++k) {
+    std::vector<const MPVariable*> y(M);
     for (int e = 0; e < M; ++e) {
-      MPConstraint* ct = solver.MakeRowConstraint(0.0, solver.infinity());
-      ct->SetCoefficient(x[k][e], 1);
-      ct->SetCoefficient(y[e], -1);
+      y[e] = solver.MakeBoolVar("y_" + std::to_string(e));
     }
-  }
-  // 4) Single transmitter per node: sum_{e out of i} y[e] <= 1 citeturn1file0
-  for (int i = 0; i < N; ++i) {
-    MPConstraint* ct = solver.MakeRowConstraint(0.0, 1.0);
-    for (int e = 0; e < M; ++e) {
-      if (edges[e].u == i) ct->SetCoefficient(y[e], 1);
+    std::vector<const MPVariable*> f(F);
+    for (int k = 0; k < F; ++k) {
+      f[k] = solver.MakeNumVar(0.0, solver.infinity(), "f_" + std::to_string(k));
     }
-  }
-  // 5) Single receiver per node: sum_{e into i} y[e] <= 1 citeturn1file0
-  for (int i = 0; i < N; ++i) {
-    MPConstraint* ct = solver.MakeRowConstraint(0.0, 1.0);
-    for (int e = 0; e < M; ++e) {
-      if (edges[e].v == i) ct->SetCoefficient(y[e], 1);
-    }
-  }
 
-  // Objective: maximize total throughput ∑_k f[k]
-  MPObjective* obj = solver.MutableObjective();
-  for (int k = 0; k < P; ++k) obj->SetCoefficient(f[k], 1);
-  obj->SetMaximization();
-
-  // Solve
-  const MPSolver::ResultStatus result_status = solver.Solve();
-  if (result_status != MPSolver::OPTIMAL) {
-    std::cerr << "No optimal solution found." << std::endl;
-    return 1;
-  }
-
-  // Output: for each SD pair k, print throughput and its path
-  for (int k = 0; k < P; ++k) {
-    // Throughput
-    std::cout << static_cast<int>(f[k]->solution_value());
-    // Reconstruct path
-    std::vector<int> path;
-    int cur = src[k]; path.push_back(cur);
-    while (cur != dst[k]) {
-      for (int e = 0; e < M; ++e) {
-        if (edges[e].u == cur && x[k][e]->solution_value() > 0.5) {
-          cur = edges[e].v;
-          path.push_back(cur);
-          break;
+    // 1) Flow conservation for each SD pair (single path)
+    for (int k = 0; k < F; ++k) {
+      for (int i = 0; i < N; ++i) {
+        double rhs = 0.0;
+        if (i == src[k]) rhs = 1.0;
+        else if (i == dst[k]) rhs = -1.0;
+        MPConstraint* ct = solver.MakeRowConstraint(rhs, rhs);
+        for (int e = 0; e < M; ++e) {
+          if (dir_edges[e].u == i) ct->SetCoefficient(x[k][e], 1);
+          if (dir_edges[e].v == i) ct->SetCoefficient(x[k][e], -1);
         }
       }
     }
-    // Print path length and nodes
-    std::cout << " " << path.size();
-    for (int v : path) std::cout << " " << v;
-    std::cout << std::endl;
+
+    // 2) Link capacity: ∑_k f[k] * x[k][e] ≤ cap[e]
+    for (int e = 0; e < M; ++e) {
+      MPConstraint* ct = solver.MakeRowConstraint(0.0, dir_edges[e].cap);
+      for (int k = 0; k < F; ++k) {
+        ct->SetCoefficient(f[k], 1);
+        ct->SetCoefficient(x[k][e], -dir_edges[e].cap);
+      }
+    }
+
+    // 3) Bind x to y: x[k][e] ≤ y[e]
+    for (int k = 0; k < F; ++k) {
+      for (int e = 0; e < M; ++e) {
+        MPConstraint* ct = solver.MakeRowConstraint(-solver.infinity(), 0.0);
+        ct->SetCoefficient(x[k][e], 1);
+        ct->SetCoefficient(y[e], -1);
+      }
+    }
+
+    // 4) Transmitter limit per node: ∑ outgoing y[e] ≤ 1
+    for (int i = 0; i < N; ++i) {
+      MPConstraint* ct = solver.MakeRowConstraint(0.0, 1.0);
+      for (int e = 0; e < M; ++e) if (dir_edges[e].u == i)
+        ct->SetCoefficient(y[e], 1);
+    }
+    // 5) Receiver limit per node: ∑ incoming y[e] ≤ 1
+    for (int i = 0; i < N; ++i) {
+      MPConstraint* ct = solver.MakeRowConstraint(0.0, 1.0);
+      for (int e = 0; e < M; ++e) if (dir_edges[e].v == i)
+        ct->SetCoefficient(y[e], 1);
+    }
+
+    // Objective: maximize ∑ f[k]
+    MPObjective* obj = solver.MutableObjective();
+    for (int k = 0; k < F; ++k) obj->SetCoefficient(f[k], 1);
+    obj->SetMaximization();
+
+    // Solve
+    if (solver.Solve() != MPSolver::OPTIMAL) {
+      std::cerr << "No optimal solution for test case " << tc + 1 << std::endl;
+      continue;
+    }
+
+    // Output used directed links
+    std::vector<std::pair<int,int>> used;
+    for (int e = 0; e < M; ++e) {
+      if (y[e]->solution_value() > 0.5) used.emplace_back(dir_edges[e].u, dir_edges[e].v);
+    }
+    std::cout << used.size() << std::endl;
+    for (auto &p : used) {
+      std::cout << p.first << " " << p.second << std::endl;
+    }
+
+    // Output SD pair rates and paths
+    double total_throughput = 0.0;
+    std::cout << std::fixed << std::setprecision(6);
+    for (int k = 0; k < F; ++k) {
+      double rate = f[k]->solution_value();
+      if (rate < 1e-9) {
+        std::cout << "0 0" << std::endl;
+      } else {
+        total_throughput += rate;
+        // Reconstruct path
+        std::vector<int> path;
+        int cur = src[k];
+        path.push_back(cur);
+        while (cur != dst[k]) {
+          for (int e = 0; e < M; ++e) {
+            if (dir_edges[e].u == cur && x[k][e]->solution_value() > 0.5) {
+              cur = dir_edges[e].v;
+              path.push_back(cur);
+              break;
+            }
+          }
+        }
+        std::cout << rate << " " << path.size();
+        for (int v : path) std::cout << " " << v;
+        std::cout << std::endl;
+      }
+    }
+
+    // Test case throughput
+    std::cout << total_throughput << std::endl;
+    sum_throughput += total_throughput;
   }
+
+  // Average throughput over all test cases
+  double avg = sum_throughput / t;
+  std::cout << std::fixed << std::setprecision(6) << avg << std::endl;
+
   return 0;
 }
