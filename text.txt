@@ -1,200 +1,220 @@
-#include <bits/stdc++.h>
-#include "ortools/linear_solver/linear_solver.h"
+#include <iostream>
+#include <vector>
+#include <map>
+#include <set>
+#include <algorithm>
+#include <climits>
+#include <queue>
+#include <ortools/linear_solver/linear_solver.h>
 
 using namespace std;
 using namespace operations_research;
 
-const string STUDENT_ID = "111550005";
+// Structure to represent an edge in the network
+struct Edge {
+    int src, dst;
+    int capacity;
+    Edge(int s, int d, int c) : src(s), dst(d), capacity(c) {}
+};
+
+// Structure to represent a source-destination (SD) pair
+struct SDPair {
+    int src, dst;
+    SDPair(int s, int d) : src(s), dst(d) {}
+};
 
 int main() {
-  ios::sync_with_stdio(false);
-  cin.tie(nullptr);
-
-  int T;
-  cin >> T;
-  // 只印一次學號
-  cout << STUDENT_ID << "\n";
-
-  for (int tc = 0; tc < T; ++tc) {
-    int N, E, F;
-    cin >> N >> E >> F;
-    vector<int> src(F), dst(F);
-    for (int i = 0; i < F; ++i) {
-      cin >> src[i] >> dst[i];
+    // Step 1: Parse input
+    int n, m, k;
+    cin >> n >> m >> k;
+    
+    // Read edges (links)
+    vector<Edge> edges;
+    map<pair<int, int>, int> edge_index;
+    map<pair<int, int>, int> edge_capacity;
+    
+    for (int i = 0; i < m; i++) {
+        int src, dst, capacity;
+        cin >> src >> dst >> capacity;
+        edges.push_back(Edge(src, dst, capacity));
+        edge_index[{src, dst}] = i;
+        edge_capacity[{src, dst}] = capacity;
     }
-    // 讀邊並存雙向有向圖
-    map<pair<int,int>, double> capacity;
-    vector<pair<int,int>> edges;
-    edges.reserve(2 * E);
-    for (int i = 0; i < E; ++i) {
-      int u, v;
-      double c;
-      cin >> u >> v >> c;
-      capacity[{u, v}] = c;
-      capacity[{v, u}] = c;
-      edges.emplace_back(u, v);
-      edges.emplace_back(v, u);
+    
+    // Read source-destination pairs
+    vector<SDPair> sd_pairs;
+    for (int i = 0; i < k; i++) {
+        int src, dst;
+        cin >> src >> dst;
+        sd_pairs.push_back(SDPair(src, dst));
     }
-    int E2 = edges.size();
-
-    // 建 MIP solver
-    MPSolver solver("lab5", MPSolver::CBC_MIXED_INTEGER_PROGRAMMING);
-
-    // 變數：x[f][e] (binary), y[e] (binary), flow[f] (continuous [0,1]), z[f][e] (continuous [0,1])
-    vector<vector<MPVariable*>> x(F, vector<MPVariable*>(E2));
-    vector<MPVariable*> y(E2);
-    vector<MPVariable*> flow(F);
-    vector<vector<MPVariable*>> z(F, vector<MPVariable*>(E2));
-
-    for (int f = 0; f < F; ++f) {
-      flow[f] = solver.MakeNumVar(0.0, 1.0, "flow_" + to_string(f));
-      for (int e = 0; e < E2; ++e) {
-        const auto& [u, v] = edges[e];
-        x[f][e] = solver.MakeBoolVar(
-            "x_" + to_string(f) + "_" + to_string(u) + "_" + to_string(v));
-        z[f][e] = solver.MakeNumVar(0.0, 1.0,
-            "z_" + to_string(f) + "_" + to_string(u) + "_" + to_string(v));
-      }
+    
+    // Step 2: Set up the solver
+    unique_ptr<MPSolver> solver(MPSolver::CreateSolver("SCIP"));
+    if (!solver) {
+        cerr << "SCIP solver not available." << endl;
+        return 1;
     }
-    for (int e = 0; e < E2; ++e) {
-      const auto& [u, v] = edges[e];
-      y[e] = solver.MakeBoolVar(
-          "y_" + to_string(u) + "_" + to_string(v));
-    }
-
-    // 1. Y–Z binding: x[f][e] ≤ y[e]
-    for (int f = 0; f < F; ++f) {
-      for (int e = 0; e < E2; ++e) {
-        MPConstraint* ct =
-            solver.MakeRowConstraint(-MPSolver::infinity(), 0.0);
-        ct->SetCoefficient(x[f][e],  1.0);
-        ct->SetCoefficient(y[e],     -1.0);
-      }
-    }
-    //    Σ_f x[f][e] ≥ y[e]
-    for (int e = 0; e < E2; ++e) {
-      MPConstraint* ct =
-          solver.MakeRowConstraint(0.0, MPSolver::infinity());
-      ct->SetCoefficient(y[e],  1.0);
-      for (int f = 0; f < F; ++f) {
-        ct->SetCoefficient(x[f][e], -1.0);
-      }
-    }
-
-    // 2. 單一 transmitter per node: Σ_{e from u} y[e] ≤ 1
-    for (int u = 0; u < N; ++u) {
-      MPConstraint* ct =
-          solver.MakeRowConstraint(-MPSolver::infinity(), 1.0);
-      for (int e = 0; e < E2; ++e) {
-        if (edges[e].first == u) {
-          ct->SetCoefficient(y[e], 1.0);
+    
+    // Define decision variables
+    
+    // y[i][e]: whether SD pair i uses edge e
+    vector<vector<MPVariable*>> y(k);
+    for (int i = 0; i < k; i++) {
+        y[i].resize(m);
+        for (int e = 0; e < m; e++) {
+            y[i][e] = solver->MakeIntVar(0, 1, "y_" + to_string(i) + "_" + to_string(e));
         }
-      }
     }
-    // 3. 單一 receiver per node: Σ_{e to v} y[e] ≤ 1
-    for (int v = 0; v < N; ++v) {
-      MPConstraint* ct =
-          solver.MakeRowConstraint(-MPSolver::infinity(), 1.0);
-      for (int e = 0; e < E2; ++e) {
-        if (edges[e].second == v) {
-          ct->SetCoefficient(y[e], 1.0);
-        }
-      }
+    
+    // z[e]: whether edge e is used by any SD pair
+    vector<MPVariable*> z(m);
+    for (int e = 0; e < m; e++) {
+        z[e] = solver->MakeIntVar(0, 1, "z_" + to_string(e));
     }
-
-    // 4. Flow conservation & single-path
-    for (int f = 0; f < F; ++f) {
-      // 中繼點 k: Σ_in x = Σ_out x
-      for (int k = 0; k < N; ++k) {
-        if (k == src[f] || k == dst[f]) continue;
-        MPConstraint* ct = solver.MakeRowConstraint(0.0, 0.0);
-        for (int e = 0; e < E2; ++e) {
-          const auto& [u, v] = edges[e];
-          if (v == k) ct->SetCoefficient(x[f][e],  1.0);
-          if (u == k) ct->SetCoefficient(x[f][e], -1.0);
-        }
-      }
-      // 源點：Σ_out x − Σ_in x = flow[f]
-      {
-        MPConstraint* ct = solver.MakeRowConstraint(0.0, 0.0);
-        for (int e = 0; e < E2; ++e) {
-          const auto& [u, v] = edges[e];
-          if (u == src[f]) ct->SetCoefficient(x[f][e],  1.0);
-          if (v == src[f]) ct->SetCoefficient(x[f][e], -1.0);
-        }
-        ct->SetCoefficient(flow[f], -1.0);
-      }
-      // 匯點：Σ_in x − Σ_out x = flow[f]
-      {
-        MPConstraint* ct = solver.MakeRowConstraint(0.0, 0.0);
-        for (int e = 0; e < E2; ++e) {
-          const auto& [u, v] = edges[e];
-          if (v == dst[f]) ct->SetCoefficient(x[f][e],  1.0);
-          if (u == dst[f]) ct->SetCoefficient(x[f][e], -1.0);
-        }
-        ct->SetCoefficient(flow[f], -1.0);
-      }
+    
+    // x[i]: traffic amount for SD pair i
+    vector<MPVariable*> x(k);
+    for (int i = 0; i < k; i++) {
+        x[i] = solver->MakeNumVar(0, solver->infinity(), "x_" + to_string(i));
     }
-
-    // 5. 線性化 z[f][e] = x[f][e] * flow[f] （M=1）
-    for (int f = 0; f < F; ++f) {
-      for (int e = 0; e < E2; ++e) {
-        // z ≤ x
-        {
-          MPConstraint* ct =
-            solver.MakeRowConstraint(-MPSolver::infinity(), 0.0);
-          ct->SetCoefficient(z[f][e], 1.0);
-          ct->SetCoefficient(x[f][e], -1.0);
+    
+    // Step 3: Add constraints
+    
+    // Flow conservation constraint
+    for (int i = 0; i < k; i++) {
+        for (int node = 0; node < n; node++) {
+            MPConstraint* flow_constraint = solver->MakeRowConstraint(0, 0);
+            
+            // Source node: outgoing - incoming = 1
+            if (node == sd_pairs[i].src) {
+                flow_constraint->SetBounds(1, 1);
+            }
+            // Destination node: outgoing - incoming = -1
+            else if (node == sd_pairs[i].dst) {
+                flow_constraint->SetBounds(-1, -1);
+            }
+            // Intermediate node: outgoing - incoming = 0
+            
+            // Add outgoing edges
+            for (int e = 0; e < m; e++) {
+                if (edges[e].src == node) {
+                    flow_constraint->SetCoefficient(y[i][e], 1);
+                }
+            }
+            
+            // Subtract incoming edges
+            for (int e = 0; e < m; e++) {
+                if (edges[e].dst == node) {
+                    flow_constraint->SetCoefficient(y[i][e], -1);
+                }
+            }
         }
-        // z ≤ flow
-        {
-          MPConstraint* ct =
-            solver.MakeRowConstraint(-MPSolver::infinity(), 0.0);
-          ct->SetCoefficient(z[f][e],     1.0);
-          ct->SetCoefficient(flow[f],     -1.0);
-        }
-        // z + x ≥ flow  ↔  z ≥ flow − (1−x)
-        {
-          MPConstraint* ct =
-            solver.MakeRowConstraint(0.0, MPSolver::infinity());
-          ct->SetCoefficient(z[f][e], 1.0);
-          ct->SetCoefficient(x[f][e], 1.0);
-          ct->SetCoefficient(flow[f], -1.0);
-        }
-      }
     }
-
-    // 6. 容量限制：Σ_f z[f][e] ≤ capacity[e]
-    for (int e = 0; e < E2; ++e) {
-      const auto& edge = edges[e];
-      double cap = capacity[edge];
-      MPConstraint* ct =
-        solver.MakeRowConstraint(-MPSolver::infinity(), cap);
-      for (int f = 0; f < F; ++f) {
-        ct->SetCoefficient(z[f][e], 1.0);
-      }
+    
+    // Link capacity constraint
+    for (int e = 0; e < m; e++) {
+        MPConstraint* capacity_constraint = solver->MakeRowConstraint(0, edges[e].capacity);
+        for (int i = 0; i < k; i++) {
+            capacity_constraint->SetCoefficient(x[i], y[i][e]);
+        }
     }
-
-    // 目標：最大化 Σ_f flow[f]
-    MPObjective* objective = solver.MutableObjective();
-    for (int f = 0; f < F; ++f) {
-      objective->SetCoefficient(flow[f], 1.0);
+    
+    // Task 1: Add the following three constraints:
+    
+    // 1. Y-Z binding constraint: z[e] = 1 if edge e is used by any SD pair
+    for (int e = 0; e < m; e++) {
+        for (int i = 0; i < k; i++) {
+            // If y[i][e] = 1, then z[e] must be at least 1
+            MPConstraint* binding_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
+            binding_constraint->SetCoefficient(y[i][e], 1);
+            binding_constraint->SetCoefficient(z[e], -1);
+        }
+        
+        // Sum of y[i][e] across all i should be <= k * z[e]
+        MPConstraint* sum_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
+        for (int i = 0; i < k; i++) {
+            sum_constraint->SetCoefficient(y[i][e], 1);
+        }
+        sum_constraint->SetCoefficient(z[e], -k);
+    }
+    
+    // 2. Single transmitter per node constraint
+    for (int node = 0; node < n; node++) {
+        MPConstraint* out_constraint = solver->MakeRowConstraint(0, 1);
+        for (int e = 0; e < m; e++) {
+            if (edges[e].src == node) {
+                out_constraint->SetCoefficient(z[e], 1);
+            }
+        }
+    }
+    
+    // 3. Single receiver per node constraint
+    for (int node = 0; node < n; node++) {
+        MPConstraint* in_constraint = solver->MakeRowConstraint(0, 1);
+        for (int e = 0; e < m; e++) {
+            if (edges[e].dst == node) {
+                in_constraint->SetCoefficient(z[e], 1);
+            }
+        }
+    }
+    
+    // Step 4: Set objective function
+    MPObjective* objective = solver->MutableObjective();
+    for (int i = 0; i < k; i++) {
+        objective->SetCoefficient(x[i], 1);
     }
     objective->SetMaximization();
-
-    // Solve
-    const MPSolver::ResultStatus status = solver.Solve();
-    if (status != MPSolver::OPTIMAL) {
-      cerr << "Testcase " << tc << ": No optimal solution\n";
+    
+    // Step 5: Solve
+    const MPSolver::ResultStatus result_status = solver->Solve();
+    
+    // Step 6: Print results
+    if (result_status == MPSolver::OPTIMAL || result_status == MPSolver::FEASIBLE) {
+        cout << k << endl;
+        
+        for (int i = 0; i < k; i++) {
+            // Get the traffic amount for this SD pair
+            double traffic = x[i]->solution_value();
+            
+            // Collect edges used in the path
+            vector<int> path_edges;
+            for (int e = 0; e < m; e++) {
+                if (y[i][e]->solution_value() > 0.5) {
+                    path_edges.push_back(e);
+                }
+            }
+            
+            // Count the number of nodes in the path
+            set<int> path_nodes;
+            path_nodes.insert(sd_pairs[i].src);
+            path_nodes.insert(sd_pairs[i].dst);
+            for (int e : path_edges) {
+                path_nodes.insert(edges[e].src);
+                path_nodes.insert(edges[e].dst);
+            }
+            
+            // Output SD pair information
+            cout << sd_pairs[i].src << " " << sd_pairs[i].dst << " " << traffic << " " << path_nodes.size() << " ";
+            
+            // Reconstruct the path
+            int current = sd_pairs[i].src;
+            cout << current << " ";
+            
+            while (current != sd_pairs[i].dst) {
+                for (int e : path_edges) {
+                    if (edges[e].src == current) {
+                        current = edges[e].dst;
+                        cout << current << " ";
+                        break;
+                    }
+                }
+            }
+            cout << endl;
+        }
+    } else {
+        cout << "No solution found." << endl;
     }
-
-    // 輸出每條 SD pair 的 flow（0 or 1）
-    cout << fixed << setprecision(6);
-    for (int f = 0; f < F; ++f) {
-      double val = flow[f]->solution_value();
-      cout << val << (f + 1 < F ? " " : "\n");
-    }
-  }
-
-  return 0;
+    
+    return 0;
 }
