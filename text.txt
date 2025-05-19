@@ -1,20 +1,22 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <algorithm>
 #include <climits>
 #include <queue>
+#include <iomanip>
 #include <ortools/linear_solver/linear_solver.h>
 
 using namespace std;
 using namespace operations_research;
 
-// Structure to represent an edge in the network
-struct Edge {
-    int src, dst;
-    int capacity;
-    Edge(int s, int d, int c) : src(s), dst(d), capacity(c) {}
+// Structure to represent an undirected edge in the network
+struct UndirectedEdge {
+    int u, v;
+    double capacity;
+    UndirectedEdge(int _u, int _v, double _c) : u(_u), v(_v), capacity(_c) {}
 };
 
 // Structure to represent a source-destination (SD) pair
@@ -23,198 +25,271 @@ struct SDPair {
     SDPair(int s, int d) : src(s), dst(d) {}
 };
 
+// Function to reconstruct path from source to destination using the y variables
+vector<int> reconstructPath(const vector<vector<double>>& y_values, int src, int dst, 
+                          const vector<pair<int, int>>& directed_edges, int n) {
+    vector<int> path;
+    path.push_back(src);
+    
+    int current = src;
+    while (current != dst) {
+        bool found = false;
+        for (size_t e = 0; e < directed_edges.size(); e++) {
+            if (directed_edges[e].first == current && y_values[e] > 0.5) {
+                current = directed_edges[e].second;
+                path.push_back(current);
+                found = true;
+                break;
+            }
+        }
+        if (!found) break; // No path found (shouldn't happen if solution is feasible)
+    }
+    
+    return path;
+}
+
+// Your student ID
+const string STUDENT_ID = "PUT_YOUR_STUDENT_ID_HERE";
+
 int main() {
-    // Step 1: Parse input
-    int n, m, k;
-    cin >> n >> m >> k;
+    int t; // Number of test cases
+    cin >> t;
     
-    // Read edges (links)
-    vector<Edge> edges;
-    map<pair<int, int>, int> edge_index;
-    map<pair<int, int>, int> edge_capacity;
+    // Print student ID
+    cout << STUDENT_ID << endl;
     
-    for (int i = 0; i < m; i++) {
-        int src, dst, capacity;
-        cin >> src >> dst >> capacity;
-        edges.push_back(Edge(src, dst, capacity));
-        edge_index[{src, dst}] = i;
-        edge_capacity[{src, dst}] = capacity;
-    }
+    double total_throughput = 0.0;
     
-    // Read source-destination pairs
-    vector<SDPair> sd_pairs;
-    for (int i = 0; i < k; i++) {
-        int src, dst;
-        cin >> src >> dst;
-        sd_pairs.push_back(SDPair(src, dst));
-    }
-    
-    // Step 2: Set up the solver
-    unique_ptr<MPSolver> solver(MPSolver::CreateSolver("SCIP"));
-    if (!solver) {
-        cerr << "SCIP solver not available." << endl;
-        return 1;
-    }
-    
-    // Define decision variables
-    
-    // y[i][e]: whether SD pair i uses edge e
-    vector<vector<MPVariable*>> y(k);
-    for (int i = 0; i < k; i++) {
-        y[i].resize(m);
-        for (int e = 0; e < m; e++) {
-            y[i][e] = solver->MakeIntVar(0, 1, "y_" + to_string(i) + "_" + to_string(e));
-        }
-    }
-    
-    // z[e]: whether edge e is used by any SD pair
-    vector<MPVariable*> z(m);
-    for (int e = 0; e < m; e++) {
-        z[e] = solver->MakeIntVar(0, 1, "z_" + to_string(e));
-    }
-    
-    // x[i]: traffic amount for SD pair i
-    vector<MPVariable*> x(k);
-    for (int i = 0; i < k; i++) {
-        x[i] = solver->MakeNumVar(0, solver->infinity(), "x_" + to_string(i));
-    }
-    
-    // Step 3: Add constraints
-    
-    // Flow conservation constraint
-    for (int i = 0; i < k; i++) {
-        for (int node = 0; node < n; node++) {
-            MPConstraint* flow_constraint = solver->MakeRowConstraint(0, 0);
-            
-            // Source node: outgoing - incoming = 1
-            if (node == sd_pairs[i].src) {
-                flow_constraint->SetBounds(1, 1);
-            }
-            // Destination node: outgoing - incoming = -1
-            else if (node == sd_pairs[i].dst) {
-                flow_constraint->SetBounds(-1, -1);
-            }
-            // Intermediate node: outgoing - incoming = 0
-            
-            // Add outgoing edges
-            for (int e = 0; e < m; e++) {
-                if (edges[e].src == node) {
-                    flow_constraint->SetCoefficient(y[i][e], 1);
-                }
-            }
-            
-            // Subtract incoming edges
-            for (int e = 0; e < m; e++) {
-                if (edges[e].dst == node) {
-                    flow_constraint->SetCoefficient(y[i][e], -1);
-                }
-            }
-        }
-    }
-    
-    // Link capacity constraint
-    for (int e = 0; e < m; e++) {
-        MPConstraint* capacity_constraint = solver->MakeRowConstraint(0, edges[e].capacity);
-        for (int i = 0; i < k; i++) {
-            capacity_constraint->SetCoefficient(x[i], y[i][e]);
-        }
-    }
-    
-    // Task 1: Add the following three constraints:
-    
-    // 1. Y-Z binding constraint: z[e] = 1 if edge e is used by any SD pair
-    for (int e = 0; e < m; e++) {
-        for (int i = 0; i < k; i++) {
-            // If y[i][e] = 1, then z[e] must be at least 1
-            MPConstraint* binding_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
-            binding_constraint->SetCoefficient(y[i][e], 1);
-            binding_constraint->SetCoefficient(z[e], -1);
+    for (int test_case = 0; test_case < t; test_case++) {
+        // Step 1: Parse input for this test case
+        int n, m, k;
+        cin >> n >> m >> k;
+        
+        // Read undirected edges
+        vector<UndirectedEdge> undirected_edges;
+        for (int i = 0; i < m; i++) {
+            int u, v;
+            double capacity;
+            cin >> u >> v >> capacity;
+            undirected_edges.push_back(UndirectedEdge(u, v, capacity));
         }
         
-        // Sum of y[i][e] across all i should be <= k * z[e]
-        MPConstraint* sum_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
+        // Read source-destination pairs
+        vector<SDPair> sd_pairs;
         for (int i = 0; i < k; i++) {
-            sum_constraint->SetCoefficient(y[i][e], 1);
+            int src, dst;
+            cin >> src >> dst;
+            sd_pairs.push_back(SDPair(src, dst));
         }
-        sum_constraint->SetCoefficient(z[e], -k);
-    }
-    
-    // 2. Single transmitter per node constraint
-    for (int node = 0; node < n; node++) {
-        MPConstraint* out_constraint = solver->MakeRowConstraint(0, 1);
-        for (int e = 0; e < m; e++) {
-            if (edges[e].src == node) {
-                out_constraint->SetCoefficient(z[e], 1);
-            }
-        }
-    }
-    
-    // 3. Single receiver per node constraint
-    for (int node = 0; node < n; node++) {
-        MPConstraint* in_constraint = solver->MakeRowConstraint(0, 1);
-        for (int e = 0; e < m; e++) {
-            if (edges[e].dst == node) {
-                in_constraint->SetCoefficient(z[e], 1);
-            }
-        }
-    }
-    
-    // Step 4: Set objective function
-    MPObjective* objective = solver->MutableObjective();
-    for (int i = 0; i < k; i++) {
-        objective->SetCoefficient(x[i], 1);
-    }
-    objective->SetMaximization();
-    
-    // Step 5: Solve
-    const MPSolver::ResultStatus result_status = solver->Solve();
-    
-    // Step 6: Print results
-    if (result_status == MPSolver::OPTIMAL || result_status == MPSolver::FEASIBLE) {
-        cout << k << endl;
         
-        for (int i = 0; i < k; i++) {
-            // Get the traffic amount for this SD pair
-            double traffic = x[i]->solution_value();
+        // Create potential directed edges from undirected edges
+        vector<pair<int, int>> directed_edges;
+        unordered_map<int, unordered_map<int, int>> edge_index;
+        unordered_map<int, unordered_map<int, double>> edge_capacity;
+        
+        for (const auto& edge : undirected_edges) {
+            // Add both directions
+            directed_edges.push_back({edge.u, edge.v});
+            edge_index[edge.u][edge.v] = directed_edges.size() - 1;
+            edge_capacity[edge.u][edge.v] = edge.capacity;
             
-            // Collect edges used in the path
-            vector<int> path_edges;
-            for (int e = 0; e < m; e++) {
-                if (y[i][e]->solution_value() > 0.5) {
-                    path_edges.push_back(e);
+            directed_edges.push_back({edge.v, edge.u});
+            edge_index[edge.v][edge.u] = directed_edges.size() - 1;
+            edge_capacity[edge.v][edge.u] = edge.capacity;
+        }
+        
+        int num_directed_edges = directed_edges.size();
+        
+        // Step 2: Set up the solver
+        unique_ptr<MPSolver> solver(MPSolver::CreateSolver("SCIP"));
+        if (!solver) {
+            cerr << "SCIP solver not available." << endl;
+            return 1;
+        }
+        
+        // Define decision variables
+        
+        // y[f][e]: whether SD pair f uses directed edge e
+        vector<vector<MPVariable*>> y(k, vector<MPVariable*>(num_directed_edges));
+        for (int f = 0; f < k; f++) {
+            for (int e = 0; e < num_directed_edges; e++) {
+                y[f][e] = solver->MakeIntVar(0, 1, "y_" + to_string(f) + "_" + to_string(e));
+            }
+        }
+        
+        // z[e]: whether directed edge e is used by any SD pair
+        vector<MPVariable*> z(num_directed_edges);
+        for (int e = 0; e < num_directed_edges; e++) {
+            z[e] = solver->MakeIntVar(0, 1, "z_" + to_string(e));
+        }
+        
+        // x[f]: traffic amount for SD pair f
+        vector<MPVariable*> x(k);
+        for (int f = 0; f < k; f++) {
+            x[f] = solver->MakeNumVar(0, solver->infinity(), "x_" + to_string(f));
+        }
+        
+        // Step 3: Add constraints
+        
+        // Flow conservation constraint
+        for (int f = 0; f < k; f++) {
+            for (int node = 0; node < n; node++) {
+                MPConstraint* flow_constraint = solver->MakeRowConstraint(0, 0);
+                
+                // Source node: outgoing - incoming = 1
+                if (node == sd_pairs[f].src) {
+                    flow_constraint->SetBounds(1, 1);
                 }
-            }
-            
-            // Count the number of nodes in the path
-            set<int> path_nodes;
-            path_nodes.insert(sd_pairs[i].src);
-            path_nodes.insert(sd_pairs[i].dst);
-            for (int e : path_edges) {
-                path_nodes.insert(edges[e].src);
-                path_nodes.insert(edges[e].dst);
-            }
-            
-            // Output SD pair information
-            cout << sd_pairs[i].src << " " << sd_pairs[i].dst << " " << traffic << " " << path_nodes.size() << " ";
-            
-            // Reconstruct the path
-            int current = sd_pairs[i].src;
-            cout << current << " ";
-            
-            while (current != sd_pairs[i].dst) {
-                for (int e : path_edges) {
-                    if (edges[e].src == current) {
-                        current = edges[e].dst;
-                        cout << current << " ";
-                        break;
+                // Destination node: outgoing - incoming = -1
+                else if (node == sd_pairs[f].dst) {
+                    flow_constraint->SetBounds(-1, -1);
+                }
+                // Intermediate node: outgoing - incoming = 0
+                
+                // Add outgoing edges
+                for (int e = 0; e < num_directed_edges; e++) {
+                    if (directed_edges[e].first == node) {
+                        flow_constraint->SetCoefficient(y[f][e], 1);
+                    }
+                }
+                
+                // Subtract incoming edges
+                for (int e = 0; e < num_directed_edges; e++) {
+                    if (directed_edges[e].second == node) {
+                        flow_constraint->SetCoefficient(y[f][e], -1);
                     }
                 }
             }
-            cout << endl;
         }
-    } else {
-        cout << "No solution found." << endl;
+        
+        // Link capacity constraint
+        for (int e = 0; e < num_directed_edges; e++) {
+            int u = directed_edges[e].first;
+            int v = directed_edges[e].second;
+            double capacity = edge_capacity[u][v];
+            
+            MPConstraint* capacity_constraint = solver->MakeRowConstraint(0, capacity);
+            for (int f = 0; f < k; f++) {
+                capacity_constraint->SetCoefficient(y[f][e], x[f]);
+            }
+        }
+        
+        // Task 1: Add the following three constraints:
+        
+        // 1. Y-Z binding constraint: z[e] = 1 if edge e is used by any SD pair
+        for (int e = 0; e < num_directed_edges; e++) {
+            for (int f = 0; f < k; f++) {
+                // If y[f][e] = 1, then z[e] must be at least 1
+                MPConstraint* binding_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
+                binding_constraint->SetCoefficient(y[f][e], 1);
+                binding_constraint->SetCoefficient(z[e], -1);
+            }
+            
+            // Sum of y[f][e] across all f should be <= k * z[e]
+            MPConstraint* sum_constraint = solver->MakeRowConstraint(-solver->infinity(), 0);
+            for (int f = 0; f < k; f++) {
+                sum_constraint->SetCoefficient(y[f][e], 1);
+            }
+            sum_constraint->SetCoefficient(z[e], -k);
+        }
+        
+        // 2. Single transmitter per node constraint
+        for (int node = 0; node < n; node++) {
+            MPConstraint* out_constraint = solver->MakeRowConstraint(0, 1);
+            for (int e = 0; e < num_directed_edges; e++) {
+                if (directed_edges[e].first == node) {
+                    out_constraint->SetCoefficient(z[e], 1);
+                }
+            }
+        }
+        
+        // 3. Single receiver per node constraint
+        for (int node = 0; node < n; node++) {
+            MPConstraint* in_constraint = solver->MakeRowConstraint(0, 1);
+            for (int e = 0; e < num_directed_edges; e++) {
+                if (directed_edges[e].second == node) {
+                    in_constraint->SetCoefficient(z[e], 1);
+                }
+            }
+        }
+        
+        // Step 4: Set objective function - maximize total throughput
+        MPObjective* objective = solver->MutableObjective();
+        for (int f = 0; f < k; f++) {
+            objective->SetCoefficient(x[f], 1);
+        }
+        objective->SetMaximization();
+        
+        // Step 5: Solve
+        const MPSolver::ResultStatus result_status = solver->Solve();
+        
+        // Step 6: Process results
+        if (result_status == MPSolver::OPTIMAL || result_status == MPSolver::FEASIBLE) {
+            // Count used directed links
+            vector<pair<int, int>> used_links;
+            for (int e = 0; e < num_directed_edges; e++) {
+                if (z[e]->solution_value() > 0.5) {
+                    used_links.push_back(directed_edges[e]);
+                }
+            }
+            
+            // Output number of used directed links
+            cout << used_links.size() << endl;
+            
+            // Output used directed links
+            for (const auto& link : used_links) {
+                cout << link.first << " " << link.second << endl;
+            }
+            
+            // Store y values for path reconstruction
+            vector<vector<double>> y_values(k, vector<double>(num_directed_edges));
+            for (int f = 0; f < k; f++) {
+                for (int e = 0; e < num_directed_edges; e++) {
+                    y_values[f][e] = y[f][e]->solution_value();
+                }
+            }
+            
+            // Calculate total throughput for this test case
+            double test_case_throughput = 0;
+            
+            // Output SD pair information
+            for (int f = 0; f < k; f++) {
+                double flow = x[f]->solution_value();
+                test_case_throughput += flow;
+                
+                if (flow > 0) {
+                    // Reconstruct path
+                    vector<int> path = reconstructPath(y_values[f], sd_pairs[f].src, sd_pairs[f].dst, directed_edges, n);
+                    
+                    // Output flow, path length, and path
+                    cout << fixed << setprecision(6) << flow << " " << path.size();
+                    for (int node : path) {
+                        cout << " " << node;
+                    }
+                    cout << endl;
+                } else {
+                    // No flow for this SD pair
+                    cout << "0 0" << endl;
+                }
+            }
+            
+            // Output total throughput for this test case
+            cout << fixed << setprecision(6) << test_case_throughput << endl;
+            
+            // Add to overall throughput
+            total_throughput += test_case_throughput;
+        } else {
+            // No solution found for this test case
+            cout << "0" << endl;  // No used links
+            for (int f = 0; f < k; f++) {
+                cout << "0 0" << endl;  // No flow for any SD pair
+            }
+            cout << "0" << endl;  // Total throughput is 0
+        }
     }
+    
+    // Output average throughput across all test cases
+    cout << fixed << setprecision(6) << total_throughput / t << endl;
     
     return 0;
 }
