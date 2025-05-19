@@ -1,66 +1,24 @@
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc: In function ‘int main()’:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:91:28: error: ‘class operations_research::MPSolver’ has no member named ‘MakeEquality’
-   91 |                     solver.MakeEquality(out - in, 1); // source: only send one path
-      |                            ^~~~~~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:93:28: error: ‘class operations_research::MPSolver’ has no member named ‘MakeEquality’
-   93 |                     solver.MakeEquality(in - out, 1); // sink: only receive one path
-      |                            ^~~~~~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:95:28: error: ‘class operations_research::MPSolver’ has no member named ‘MakeEquality’
-   95 |                     solver.MakeEquality(in - out, 0); // intermediate: conserve
-      |                            ^~~~~~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:107:20: error: ‘class operations_research::MPSolver’ has no member named ‘MakeConstraint’; did you mean ‘MakeRowConstraint’?
-  107 |             solver.MakeConstraint(0, MPSolver::infinity(), "")->SetCoefficient(y[e], -F);
-      |                    ^~~~~~~~~~~~~~
-      |                    MakeRowConstraint
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:108:20: error: ‘class operations_research::MPSolver’ has no member named ‘MakeConstraint’; did you mean ‘MakeRowConstraint’?
-  108 |             solver.MakeConstraint(0, MPSolver::infinity(), "")->SetCoefficient(sum, 1);
-      |                    ^~~~~~~~~~~~~~
-      |                    MakeRowConstraint
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:112:24: error: ‘class operations_research::MPSolver’ has no member named ‘MakeConstraint’; did you mean ‘MakeRowConstraint’?
-  112 |                 solver.MakeConstraint(0, 0, "")->SetCoefficient(y[e], -1)->SetCoefficient(x[{f, e.first, e.second}], 1);
-      |                        ^~~~~~~~~~~~~~
-      |                        MakeRowConstraint
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:122:20: error: ‘class operations_research::MPSolver’ has no member named ‘MakeConstraint’; did you mean ‘MakeRowConstraint’?
-  122 |             solver.MakeConstraint(0, 1, "")->SetCoefficient(sum_out, 1); // 最多一個 outgoing
-      |                    ^~~~~~~~~~~~~~
-      |                    MakeRowConstraint
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:123:20: error: ‘class operations_research::MPSolver’ has no member named ‘MakeConstraint’; did you mean ‘MakeRowConstraint’?
-  123 |             solver.MakeConstraint(0, 1, "")->SetCoefficient(sum_in, 1);  // 最多一個 incoming
-      |                    ^~~~~~~~~~~~~~
-      |                    MakeRowConstraint
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:128:30: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
-  128 |             LinearExpr sum = 0;
-      |                              ^
-In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:3:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
-  125 |   LinearExpr(const MPVariable* var);  // NOLINT
-      |   ^~~~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
-  118 |   LinearExpr(double constant);  // NOLINT
-      |   ^~~~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:130:29: error: invalid operands of types ‘__gnu_cxx::__alloc_traits<std::allocator<operations_research::MPVariable*>, operations_research::MPVariable*>::value_type’ {aka ‘operations_research::MPVariable*’} and ‘std::map<std::tuple<int, int, int>, operations_research::MPVariable*>::mapped_type’ {aka ‘operations_research::MPVariable*’} to binary ‘operator*’
-  130 |                 sum += r[f] * x[{f, e.first, e.second}];
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:131:20: error: ‘class operations_research::MPSolver’ has no member named ‘MakeConstraint’; did you mean ‘MakeRowConstraint’?
-  131 |             solver.MakeConstraint(0.0, cap[e], "")->SetCoefficient(sum, 1);
-      |                    ^~~~~~~~~~~~~~
-      |                    MakeRowConstraint
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:142:26: error: conversion from ‘int’ to ‘operations_research::LinearExpr’ is ambiguous
-  142 |         LinearExpr obj = 0;
-      |                          ^
-In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
-                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:3:
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
-  125 |   LinearExpr(const MPVariable* var);  // NOLINT
-      |   ^~~~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
-  118 |   LinearExpr(double constant);  // NOLINT
-      |   ^~~~~~~~~~
-/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:145:16: error: ‘class operations_research::MPSolver’ has no member named ‘Maximize’
-  145 |         solver.Maximize(obj);
-      |                ^~~~~~~~
-gmake[2]: *** [BasicExample/CMakeFiles/BasicExample.dir/build.make:76: BasicExample/CMakeFiles/BasicExample.dir/src/lab5_ortools.cc.o] Error 1
-gmake[2]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
-gmake[1]: *** [CMakeFiles/Makefile2:11562: BasicExample/CMakeFiles/BasicExample.dir/all] Error 2
-gmake[1]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
-gmake: *** [Makefile:166: all] Error 2
+111550005
+1
+0 1
+1000000.000000 2 0 1
+1000000.000000
+2
+0 1
+1 2
+1000000.000000 3 0 1 2
+1000000.000000
+0
+0 0
+0 0
+0.000000
+0
+0 0
+0 0
+0.000000
+0
+0 0
+0 0
+0 0
+0.000000
+400000.000000
