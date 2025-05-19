@@ -8,74 +8,69 @@ int main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    // Print student ID
     cout << "111550005\n";
-
-    int T;
-    cin >> T;
+    int T; cin >> T;
     vector<double> throughputs(T);
-
     for (int tc = 0; tc < T; ++tc) {
         int U, E, F;
         cin >> U >> E >> F;
         int N = U;
 
-        // Read edges
         vector<pair<int,int>> edges;
         vector<double> cap;
         vector<vector<int>> adj(N);
         edges.reserve(2*E);
         cap.reserve(2*E);
         for (int i = 0; i < E; ++i) {
-            int u, v;
-            double r;
+            int u,v; double r;
             cin >> u >> v >> r;
-            edges.emplace_back(u, v);
-            cap.push_back(r);
-            adj[u].push_back(edges.size() - 1);
-            edges.emplace_back(v, u);
-            cap.push_back(r);
-            adj[v].push_back(edges.size() - 1);
+            edges.emplace_back(u,v); cap.push_back(r); adj[u].push_back(edges.size()-1);
+            edges.emplace_back(v,u); cap.push_back(r); adj[v].push_back(edges.size()-1);
         }
         vector<int> src(F), dst(F);
         for (int i = 0; i < F; ++i) cin >> src[i] >> dst[i];
 
-        // Create solver
-        unique_ptr<MPSolver> solver(MPSolver::CreateSolver("CBC_MIXED_INTEGER_PROGRAMMING"));
-        if (!solver) return 1;
+        auto solver = MPSolver::CreateSolver("CBC_MIXED_INTEGER_PROGRAMMING");
         const double INF = solver->infinity();
 
         // Variables
-        vector<MPVariable*> f(F), y(F);
-        for (int i = 0; i < F; ++i) {
-            f[i] = solver->MakeNumVar(0.0, INF, "f" + to_string(i));
-            y[i] = solver->MakeBoolVar("y" + to_string(i));
-        }
         int M = edges.size();
+        vector<MPVariable*> f(F);
         vector<vector<MPVariable*>> x(F, vector<MPVariable*>(M));
         for (int i = 0; i < F; ++i) {
-            for (int e = 0; e < M; ++e) {
+            f[i] = solver->MakeNumVar(0.0, INF, "f" + to_string(i));
+            for (int e = 0; e < M; ++e)
                 x[i][e] = solver->MakeBoolVar("x_" + to_string(i) + "_" + to_string(e));
-            }
         }
 
-        // Objective: maximize sum of f[i]
+        // Objective
         MPObjective* obj = solver->MutableObjective();
         for (int i = 0; i < F; ++i) obj->SetCoefficient(f[i], 1);
         obj->SetMaximization();
 
-        // Precompute maximum capacity
-        double max_r = 0;
-        for (double r : cap) max_r = max(max_r, r);
-
-        // Constraints
-        // f[i] <= max_r * y[i]
+        // 1) Path constraints
         for (int i = 0; i < F; ++i) {
-            MPConstraint* ct = solver->MakeRowConstraint(-INF, 0.0);
-            ct->SetCoefficient(f[i], 1);
-            ct->SetCoefficient(y[i], -max_r);
+            // source: sum_out = 1
+            {
+                MPConstraint* ct = solver->MakeRowConstraint(1.0, 1.0);
+                for (int eid : adj[src[i]]) ct->SetCoefficient(x[i][eid], 1);
+            }
+            // sink: sum_in = 1
+            {
+                MPConstraint* ct = solver->MakeRowConstraint(1.0, 1.0);
+                for (int e = 0; e < M; ++e)
+                    if (edges[e].second == dst[i]) ct->SetCoefficient(x[i][e], 1);
+            }
+            // intermediate nodes: out - in = 0
+            for (int u = 0; u < N; ++u) {
+                if (u == src[i] || u == dst[i]) continue;
+                MPConstraint* ct = solver->MakeRowConstraint(0.0, 0.0);
+                for (int eid : adj[u]) ct->SetCoefficient(x[i][eid], 1);
+                for (int e = 0; e < M; ++e)
+                    if (edges[e].second == u) ct->SetCoefficient(x[i][e], -1);
+            }
         }
-        // f[i] <= cap[e] * x[i][e]
+        // 2) f and x linking: f[i] <= cap[e] * x[i][e]  for all e
         for (int i = 0; i < F; ++i) {
             for (int e = 0; e < M; ++e) {
                 MPConstraint* ct = solver->MakeRowConstraint(-INF, 0.0);
@@ -83,96 +78,63 @@ int main() {
                 ct->SetCoefficient(x[i][e], -cap[e]);
             }
         }
-        // Flow conservation: sum_out - sum_in - b*y[i] = 0
-        for (int i = 0; i < F; ++i) {
-            for (int u = 0; u < N; ++u) {
-                double b = 0;
-                if (u == src[i]) b = 1;
-                if (u == dst[i]) b = -1;
-                MPConstraint* ct = solver->MakeRowConstraint(0.0, 0.0);
-                // outgoing
-                for (int eid : adj[u]) ct->SetCoefficient(x[i][eid], 1);
-                // incoming
-                for (int e = 0; e < M; ++e) if (edges[e].second == u) ct->SetCoefficient(x[i][e], -1);
-                // y term
-                if (b != 0) ct->SetCoefficient(y[i], -b);
-            }
+        // 3) Link capacity: sum_i f[i] * x[i][e] <= cap[e]
+        for (int e = 0; e < M; ++e) {
+            MPConstraint* ct = solver->MakeRowConstraint(-INF, cap[e]);
+            for (int i = 0; i < F; ++i)
+                ct->SetCoefficient(x[i][e], f[i] ? f[i]->solution_value() : 1); // placeholder
         }
-        // Node degree constraints: at most one outgoing and one incoming overall
+        // 4) Node degree: at most one outgoing per node
         for (int u = 0; u < N; ++u) {
             MPConstraint* cout = solver->MakeRowConstraint(0.0, 1.0);
-            MPConstraint* cin = solver->MakeRowConstraint(0.0, 1.0);
+            MPConstraint* cin  = solver->MakeRowConstraint(0.0, 1.0);
             for (int i = 0; i < F; ++i) {
                 for (int eid : adj[u]) cout->SetCoefficient(x[i][eid], 1);
                 for (int e = 0; e < M; ++e) if (edges[e].second == u) cin->SetCoefficient(x[i][e], 1);
             }
         }
 
-        // Time limit
         solver->SetTimeLimit(absl::Milliseconds(10000));
-
-        // Solve
         auto status = solver->Solve();
         if (status != MPSOLVER_OPTIMAL && status != MPSOLVER_FEASIBLE) {
             cerr << "No solution\n";
             return 1;
         }
 
-        // Extract solution
-        set<pair<int,int>> used_links;
-        vector<double> flow_val(F, 0.0);
+        // Extract
+        set<pair<int,int>> used;
+        vector<double> flow_val(F);
         for (int i = 0; i < F; ++i) {
             flow_val[i] = f[i]->solution_value();
             if (flow_val[i] <= 1e-9) continue;
-            for (int e = 0; e < M; ++e) {
-                if (x[i][e]->solution_value() > 0.5) used_links.insert(edges[e]);
-            }
+            for (int e = 0; e < M; ++e) if (x[i][e]->solution_value() > 0.5) used.insert(edges[e]);
         }
 
-        // Output used links
-        cout << used_links.size() << "\n";
-        for (auto &e : used_links) cout << e.first << " " << e.second << "\n";
-
-        // Reconstruct and output flows
+        cout << used.size() << "\n";
+        for (auto &p : used) cout << p.first << " " << p.second << "\n";
         cout << fixed << setprecision(6);
-        double sum_tp = 0;
+        double sum = 0;
         for (int i = 0; i < F; ++i) {
-            if (flow_val[i] <= 1e-9) {
-                cout << "0 0\n";
-                continue;
-            }
-            // BFS to rebuild path
+            if (flow_val[i] <= 1e-9) { cout << "0 0\n"; continue; }
             vector<int> prev(N, -1), path;
-            queue<int> q;
-            prev[src[i]] = src[i];
-            q.push(src[i]);
+            queue<int>q;
+            prev[src[i]] = src[i]; q.push(src[i]);
             while (!q.empty()) {
                 int u = q.front(); q.pop();
                 if (u == dst[i]) break;
                 for (int eid : adj[u]) {
-                    auto [a, b] = edges[eid];
-                    if (a == u && used_links.count({a, b}) && prev[b] == -1) {
-                        prev[b] = u;
-                        q.push(b);
-                    }
-                }
+                    auto [a,b] = edges[eid];
+                    if (a==u && used.count({a,b}) && prev[b]==-1) { prev[b]=u; q.push(b);} }
             }
             int cur = dst[i];
-            while (cur != prev[cur]) {
-                path.push_back(cur);
-                cur = prev[cur];
-            }
-            path.push_back(cur);
-            reverse(path.begin(), path.end());
-            cout << flow_val[i] << " " << path.size();
-            for (int v : path) cout << " " << v;
-            cout << "\n";
-            sum_tp += flow_val[i];
+            while (cur != prev[cur]) { path.push_back(cur); cur = prev[cur]; }
+            path.push_back(cur); reverse(path.begin(), path.end());
+            cout << flow_val[i] << " " << path.size(); for (int v: path) cout << " "<<v; cout << "\n";
+            sum += flow_val[i];
         }
-        cout << sum_tp << "\n";
-        throughputs[tc] = sum_tp;
+        cout << sum << "\n";
+        throughputs[tc] = sum;
     }
-
     double avg = accumulate(throughputs.begin(), throughputs.end(), 0.0) / T;
     cout << fixed << setprecision(6) << avg << "\n";
     return 0;
