@@ -1,191 +1,84 @@
-#include <bits/stdc++.h>
-#include "ortools/linear_solver/linear_solver.h"
-using namespace std;
-using namespace operations_research;
-
-int main() {
-  ios::sync_with_stdio(false);
-  cin.tie(nullptr);
-
-  int t;
-  cin >> t;
-  double total_throughput_all = 0.0;
-
-  for (int tc = 0; tc < t; ++tc) {
-    int n, m, F;
-    cin >> n >> m >> F;
-    vector<tuple<int,int,double>> undirected_edges;
-    undirected_edges.reserve(m);
-    for (int i = 0; i < m; ++i) {
-      int u, v;
-      double cap;
-      cin >> u >> v >> cap;
-      undirected_edges.emplace_back(u, v, cap);
-    }
-    vector<pair<int,int>> sd(F);
-    for (int k = 0; k < F; ++k) {
-      cin >> sd[k].first >> sd[k].second;
-    }
-    // Build directed edges list
-    vector<pair<int,int>> edges;
-    vector<double> capacity;
-    edges.reserve(2*m);
-    capacity.reserve(2*m);
-    for (auto &e : undirected_edges) {
-      int u, v;
-      double cap;
-      tie(u, v, cap) = e;
-      edges.emplace_back(u, v);
-      capacity.push_back(cap);
-      edges.emplace_back(v, u);
-      capacity.push_back(cap);
-    }
-    int E = edges.size();
-    double M = 0;
-    for (double c : capacity) M = max(M, c);
-
-    // Create solver
-    unique_ptr<MPSolver> solver(
-        MPSolver::CreateSolver("CBC_MIXED_INTEGER_PROGRAMMING"));
-    if (!solver) return 1;
-
-    // Variables
-    // x[k][e] = whether SD pair k uses directed edge e
-    vector<vector<const MPVariable*>> x(F, vector<const MPVariable*>(E));
-    for (int k = 0; k < F; ++k) {
-      for (int e = 0; e < E; ++e) {
-        x[k][e] = solver->MakeBoolVar("x_" + to_string(k) + "_" + to_string(e));
-      }
-    }
-    // z[e] = whether directed link e is constructed (occupied)
-    vector<const MPVariable*> z(E);
-    for (int e = 0; e < E; ++e) {
-      z[e] = solver->MakeBoolVar("z_" + to_string(e));
-    }
-    // f[k] = throughput assigned to SD pair k
-    vector<const MPVariable*> f(F);
-    for (int k = 0; k < F; ++k) {
-      f[k] = solver->MakeNumVar(0.0, M, "f_" + to_string(k));
-    }
-
-    // Constraints
-    // 1) Variable binding: x[k][e] <= z[e]
-    for (int k = 0; k < F; ++k) {
-      for (int e = 0; e < E; ++e) {
-        solver->MakeRowConstraint(x[k][e] <= z[e]);
-      }
-    }
-    //    z[e] <= sum_k x[k][e]
-    for (int e = 0; e < E; ++e) {
-      LinearExpr sum_x;
-      for (int k = 0; k < F; ++k) sum_x += x[k][e];
-      solver->MakeRowConstraint(z[e] <= sum_x);
-    }
-    // 2) Single transmitter per node: sum_{outgoing e of v} z[e] <= 1
-    for (int v = 1; v <= n; ++v) {
-      LinearExpr sum_z;
-      for (int e = 0; e < E; ++e) if (edges[e].first == v) sum_z += z[e];
-      solver->MakeRowConstraint(sum_z <= 1);
-    }
-    // 3) Single receiver per node: sum_{incoming e to v} z[e] <= 1
-    for (int v = 1; v <= n; ++v) {
-      LinearExpr sum_z;
-      for (int e = 0; e < E; ++e) if (edges[e].second == v) sum_z += z[e];
-      solver->MakeRowConstraint(sum_z <= 1);
-    }
-    // 4) Flow conservation & single path
-    for (int k = 0; k < F; ++k) {
-      int src = sd[k].first;
-      int dst = sd[k].second;
-      for (int v = 1; v <= n; ++v) {
-        LinearExpr out_x, in_x;
-        for (int e = 0; e < E; ++e) {
-          if (edges[e].first == v) out_x += x[k][e];
-          if (edges[e].second == v) in_x  += x[k][e];
-        }
-        MPConstraint* ct = nullptr;
-        if (v == src) {
-          ct = solver->MakeRowConstraint(out_x - in_x == 1);
-        } else if (v == dst) {
-          ct = solver->MakeRowConstraint(in_x - out_x == 1);
-        } else {
-          ct = solver->MakeRowConstraint(out_x - in_x == 0);
-        }
-      }
-    }
-    // 5) Link capacity: sum_k (f[k] * x[k][e]) <= capacity[e]
-    // Linearize via: y[k][e] <= f[k], y[k][e] <= M * x[k][e], sum_k y[k][e] <= capacity[e]
-    vector<vector<const MPVariable*>> y(F, vector<const MPVariable*>(E));
-    for (int k = 0; k < F; ++k) {
-      for (int e = 0; e < E; ++e) {
-        y[k][e] = solver->MakeNumVar(0.0, M, "y_" + to_string(k) + "_" + to_string(e));
-        // y <= f
-        solver->MakeRowConstraint(y[k][e] <= f[k]);
-        // y <= M * x
-        solver->MakeRowConstraint(y[k][e] <= LinearExpr(x[k][e]) * M);
-      }
-    }
-    for (int e = 0; e < E; ++e) {
-      LinearExpr sum_y;
-      for (int k = 0; k < F; ++k) sum_y += y[k][e];
-      solver->MakeRowConstraint(sum_y <= capacity[e]);
-    }
-
-    // Objective: maximize total throughput
-    MPObjective* obj = solver->MutableObjective();
-    for (int k = 0; k < F; ++k) obj->SetCoefficient(f[k], 1);
-    obj->SetMaximization();
-
-    // Solve
-    MPSolver::ResultStatus res = solver->Solve();
-    if (res != MPSolver::OPTIMAL) {
-      cerr << "No optimal solution found\n";
-      return 1;
-    }
-
-    // Extract solution
-    vector<vector<int>> path(F);
-    for (int k = 0; k < F; ++k) {
-      // Recover path from src to dst
-      int cur = sd[k].first;
-      path[k].push_back(cur);
-      while (cur != sd[k].second) {
-        for (int e = 0; e < E; ++e) {
-          if (edges[e].first == cur && x[k][e]->solution_value() > 0.5) {
-            cur = edges[e].second;
-            path[k].push_back(cur);
-            break;
-          }
-        }
-      }
-    }
-
-    // Count used directed links
-    vector<pair<int,int>> used_links;
-    for (int e = 0; e < E; ++e) {
-      if (z[e]->solution_value() > 0.5) {
-        used_links.emplace_back(edges[e]);
-      }
-    }
-    // Output for this test case
-    cout << used_links.size() << '\n';
-    for (auto &uv : used_links) cout << uv.first << ' ' << uv.second << '\n';
-    double sum_th = 0;
-    for (int k = 0; k < F; ++k) {
-      double fk = f[k]->solution_value();
-      sum_th += fk;
-      if (fk < 1e-9) {
-        cout << "0 0\n";
-      } else {
-        cout << fk << ' ' << path[k].size();
-        for (int v : path[k]) cout << ' ' << v;
-        cout << '\n';
-      }
-    }
-    cout << sum_th << '\n';
-    total_throughput_all += sum_th;
-  }
-  // Average throughput
-  cout << (total_throughput_all / t) << '\n';
-  return 0;
-}
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc: In function ‘int main()’:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:75:34: error: no matching function for call to ‘operations_research::MPSolver::MakeRowConstraint(bool)’
+   75 |         solver->MakeRowConstraint(x[k][e] <= z[e]);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:424:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(double, double)’
+  424 |   MPConstraint* MakeRowConstraint(double lb, double ub);
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:424:17: note:   candidate expects 2 arguments, 1 provided
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:427:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint()’
+  427 |   MPConstraint* MakeRowConstraint();
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:427:17: note:   candidate expects 0 arguments, 1 provided
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:430:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(double, double, const string&)’
+  430 |   MPConstraint* MakeRowConstraint(double lb, double ub,
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:430:17: note:   candidate expects 3 arguments, 1 provided
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:434:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(const string&)’
+  434 |   MPConstraint* MakeRowConstraint(const std::string& name);
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:434:54: note:   no known conversion for argument 1 from ‘bool’ to ‘const string&’ {aka ‘const std::__cxx11::basic_string<char>&’}
+  434 |   MPConstraint* MakeRowConstraint(const std::string& name);
+      |                                   ~~~~~~~~~~~~~~~~~~~^~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:440:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(const operations_research::LinearRange&)’
+  440 |   MPConstraint* MakeRowConstraint(const LinearRange& range);
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:440:54: note:   no known conversion for argument 1 from ‘bool’ to ‘const operations_research::LinearRange&’
+  440 |   MPConstraint* MakeRowConstraint(const LinearRange& range);
+      |                                   ~~~~~~~~~~~~~~~~~~~^~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:443:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(const operations_research::LinearRange&, const string&)’
+  443 |   MPConstraint* MakeRowConstraint(const LinearRange& range,
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:443:17: note:   candidate expects 2 arguments, 1 provided
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:112:58: error: conversion from ‘int’ to ‘const operations_research::LinearExpr’ is ambiguous
+  112 |           ct = solver->MakeRowConstraint(out_x - in_x == 0);
+      |                                                          ^
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:162,
+                 from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:125:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(const operations_research::MPVariable*)’
+  125 |   LinearExpr(const MPVariable* var);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:118:3: note: candidate: ‘operations_research::LinearExpr::LinearExpr(double)’
+  118 |   LinearExpr(double constant);  // NOLINT
+      |   ^~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_expr.h:217:65: note:   initializing argument 2 of ‘operations_research::LinearRange operations_research::operator==(const operations_research::LinearExpr&, const operations_research::LinearExpr&)’
+  217 | LinearRange operator==(const LinearExpr& lhs, const LinearExpr& rhs);
+      |                                               ~~~~~~~~~~~~~~~~~~^~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:123:34: error: no matching function for call to ‘operations_research::MPSolver::MakeRowConstraint(bool)’
+  123 |         solver->MakeRowConstraint(y[k][e] <= f[k]);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+In file included from /home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/BasicExample/src/lab5_ortools.cc:2:
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:424:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(double, double)’
+  424 |   MPConstraint* MakeRowConstraint(double lb, double ub);
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:424:17: note:   candidate expects 2 arguments, 1 provided
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:427:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint()’
+  427 |   MPConstraint* MakeRowConstraint();
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:427:17: note:   candidate expects 0 arguments, 1 provided
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:430:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(double, double, const string&)’
+  430 |   MPConstraint* MakeRowConstraint(double lb, double ub,
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:430:17: note:   candidate expects 3 arguments, 1 provided
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:434:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(const string&)’
+  434 |   MPConstraint* MakeRowConstraint(const std::string& name);
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:434:54: note:   no known conversion for argument 1 from ‘bool’ to ‘const string&’ {aka ‘const std::__cxx11::basic_string<char>&’}
+  434 |   MPConstraint* MakeRowConstraint(const std::string& name);
+      |                                   ~~~~~~~~~~~~~~~~~~~^~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:440:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(const operations_research::LinearRange&)’
+  440 |   MPConstraint* MakeRowConstraint(const LinearRange& range);
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:440:54: note:   no known conversion for argument 1 from ‘bool’ to ‘const operations_research::LinearRange&’
+  440 |   MPConstraint* MakeRowConstraint(const LinearRange& range);
+      |                                   ~~~~~~~~~~~~~~~~~~~^~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:443:17: note: candidate: ‘operations_research::MPConstraint* operations_research::MPSolver::MakeRowConstraint(const operations_research::LinearRange&, const string&)’
+  443 |   MPConstraint* MakeRowConstraint(const LinearRange& range,
+      |                 ^~~~~~~~~~~~~~~~~
+/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build/_deps/ortools-src/ortools/linear_solver/linear_solver.h:443:17: note:   candidate expects 2 arguments, 1 provided
+gmake[2]: *** [BasicExample/CMakeFiles/BasicExample.dir/build.make:76: BasicExample/CMakeFiles/BasicExample.dir/src/lab5_ortools.cc.o] Error 1
+gmake[2]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
+gmake[1]: *** [CMakeFiles/Makefile2:11562: BasicExample/CMakeFiles/BasicExample.dir/all] Error 2
+gmake[1]: Leaving directory '/home/lin/or-tools_x86_64_Ubuntu-22.04_cpp_v9.10.4067/cmake_or-tools/build'
+gmake: *** [Makefile:166: all] Error 2
