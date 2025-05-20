@@ -8,7 +8,7 @@ int main() {
   cin.tie(nullptr);
 
   int t;
-  cin >> t;
+  if (!(cin >> t)) return 0;
   double total_throughput_all = 0.0;
 
   for (int tc = 0; tc < t; ++tc) {
@@ -21,7 +21,7 @@ int main() {
     vector<pair<int,int>> sd(F);
     for (int k = 0; k < F; ++k) cin >> sd[k].first >> sd[k].second;
 
-    // Build directed edges
+    // Build directed graph
     vector<pair<int,int>> edges;
     vector<double> capacity;
     edges.reserve(2*m);
@@ -36,32 +36,41 @@ int main() {
     }
     int E = edges.size();
 
-    // Big M for f bound
+    // Big-M for bounds
     double M = 0;
-    for (double c : capacity) M = max(M, c);
+    for (double cap : capacity) M = max(M, cap);
 
     // Create solver
     unique_ptr<MPSolver> solver(MPSolver::CreateSolver("CBC_MIXED_INTEGER_PROGRAMMING"));
     if (!solver) return 1;
 
     // Variables
+    // x[k][e]: whether SD-pair k uses edge e
     vector<vector<const MPVariable*>> x(F, vector<const MPVariable*>(E));
     for (int k = 0; k < F; ++k) {
       for (int e = 0; e < E; ++e) {
         x[k][e] = solver->MakeBoolVar("x_" + to_string(k) + "_" + to_string(e));
       }
     }
+    // z[e]: whether edge e is used by any pair
     vector<const MPVariable*> z(E);
     for (int e = 0; e < E; ++e) {
       z[e] = solver->MakeBoolVar("z_" + to_string(e));
     }
+    // f[k]: throughput for pair k
     vector<const MPVariable*> f(F);
     for (int k = 0; k < F; ++k) {
       f[k] = solver->MakeNumVar(0.0, M, "f_" + to_string(k));
     }
+    // u[k]: whether pair k is served
+    vector<const MPVariable*> u(F);
+    for (int k = 0; k < F; ++k) {
+      u[k] = solver->MakeBoolVar("u_" + to_string(k));
+    }
 
     const double INF = solver->infinity();
-    // 1) x[k][e] <= z[e]
+    
+    // 1) Variable binding: x[k][e] <= z[e]
     for (int k = 0; k < F; ++k) {
       for (int e = 0; e < E; ++e) {
         auto ct = solver->MakeRowConstraint(-INF, 0.0);
@@ -75,31 +84,38 @@ int main() {
       ct->SetCoefficient(z[e], 1);
       for (int k = 0; k < F; ++k) ct->SetCoefficient(x[k][e], -1);
     }
-    // 3) single transmitter
-    for (int v = 1; v <= n; ++v) {
+    // 3) Single transmitter per node
+    for (int v = 0; v < n; ++v) {
       auto ct = solver->MakeRowConstraint(-INF, 1.0);
       for (int e = 0; e < E; ++e) if (edges[e].first == v) ct->SetCoefficient(z[e], 1);
     }
-    // 4) single receiver
-    for (int v = 1; v <= n; ++v) {
+    // 4) Single receiver per node
+    for (int v = 0; v < n; ++v) {
       auto ct = solver->MakeRowConstraint(-INF, 1.0);
       for (int e = 0; e < E; ++e) if (edges[e].second == v) ct->SetCoefficient(z[e], 1);
     }
-    // 5) flow conservation
+    // 5) Flow conservation with optional service u[k]
     for (int k = 0; k < F; ++k) {
-      int src = sd[k].first, dst = sd[k].second;
-      for (int v = 1; v <= n; ++v) {
-        double lb=0, ub=0;
-        if (v == src) { lb = 1; ub = 1; }
-        else if (v == dst) { lb = -1; ub = -1; }
-        auto ct = solver->MakeRowConstraint(lb, ub);
+      int src = sd[k].first;
+      int dst = sd[k].second;
+      for (int v = 0; v < n; ++v) {
+        auto ct = solver->MakeRowConstraint(0.0, 0.0);
+        // sum_out - sum_in +/- u[k] = 0
         for (int e = 0; e < E; ++e) {
           if (edges[e].first == v) ct->SetCoefficient(x[k][e], 1);
           if (edges[e].second == v) ct->SetCoefficient(x[k][e], -1);
         }
+        if (v == src) ct->SetCoefficient(u[k], -1);
+        if (v == dst) ct->SetCoefficient(u[k], 1);
       }
     }
-    // 6) capacity constraint: for each k and e, enforce f[k] <= capacity[e] + M*(1 - x[k][e])
+    // 6) If served, f[k] <= M*u[k]
+    for (int k = 0; k < F; ++k) {
+      auto ct = solver->MakeRowConstraint(-INF, 0.0);
+      ct->SetCoefficient(f[k], 1);
+      ct->SetCoefficient(u[k], -M);
+    }
+    // 7) Capacity constraints: f[k] <= cap[e] + M*(1 - x[k][e])
     for (int k = 0; k < F; ++k) {
       for (int e = 0; e < E; ++e) {
         auto ct = solver->MakeRowConstraint(-INF, capacity[e] + M);
@@ -108,29 +124,34 @@ int main() {
       }
     }
 
-    // Objective
+    // Objective: maximize total throughput
     auto obj = solver->MutableObjective();
     for (int k = 0; k < F; ++k) obj->SetCoefficient(f[k], 1);
     obj->SetMaximization();
 
     // Solve
-    if (solver->Solve() != MPSolver::OPTIMAL) {
-      cerr << "No optimal solution\n";
+    auto status = solver->Solve();
+    if (status != MPSolver::OPTIMAL) {
+      cerr << "No optimal solution" << endl;
       return 1;
     }
 
-    // Output
-    vector<pair<int,int>> used;
-    for (int e = 0; e < E; ++e) if (z[e]->solution_value() > 0.5) used.push_back(edges[e]);
-    cout << used.size() << '\n';
-    for (auto &p : used) cout << p.first << ' ' << p.second << '\n';
+    // Extract solution
+    vector<pair<int,int>> used_links;
+    for (int e = 0; e < E; ++e) {
+      if (z[e]->solution_value() > 0.5) used_links.push_back(edges[e]);
+    }
+    cout << used_links.size() << '\n';
+    for (auto &uv : used_links) cout << uv.first << ' ' << uv.second << '\n';
+
     double sum_th = 0;
     for (int k = 0; k < F; ++k) {
-      double fk = f[k]->solution_value(); sum_th += fk;
+      double fk = f[k]->solution_value();
+      sum_th += fk;
       if (fk < 1e-9) {
         cout << "0 0\n";
       } else {
-        // reconstruct path
+        // Reconstruct path
         vector<int> path;
         int cur = sd[k].first;
         path.push_back(cur);
