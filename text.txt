@@ -1,35 +1,61 @@
-void
-NixVectorRouting::SetPaths(std::string pathFile)
+template <typename T>
+Ptr<NixVector>
+NixVectorRouting<T>::GetNixVector (Ptr<Node> source, Ipv4Address dest, Ptr<NetDevice> oif) const
 {
-    std::ifstream file(pathFile);
-    if (!file.is_open())
+    NS_LOG_FUNCTION (this << source << dest << oif);
+
+    Ptr<NixVector> nixVector = Create<NixVector> ();
+
+    Ptr<Node> destNode = GetNodeByIp (dest);
+    if (destNode == 0)
     {
-        NS_LOG_ERROR("Cannot open path file: " << pathFile);
-        return;
+        NS_LOG_ERROR ("No routing path exists");
+        return 0;
     }
-    
-    std::string line;
-    while (std::getline(file, line))
+
+    if (source == destNode)
     {
-        std::istringstream iss(line);
-        int srcId, dstId, pathLength;
+        NS_LOG_DEBUG ("Do not process packets to self");
+        return 0;
+    }
+    else
+    {
+        std::vector< Ptr<Node> > parentVector;
         
-        // 读取 srcId, dstId, pathLength
-        iss >> srcId >> dstId >> pathLength;
-        
-        // 读取完整路径
-        std::vector<int> path;
-        int nodeId;
-        for (int i = 0; i < pathLength; i++)
-        {
-            iss >> nodeId;
-            path.push_back(nodeId);
-        }
-        
-        // 存储到 Table 中
+        // 使用 Table 而不是 BFS
+        int srcId = source->GetId();
+        int dstId = destNode->GetId();
         std::pair<int, int> key = std::make_pair(srcId, dstId);
-        Table[key] = path;
+        
+        if (Table.find(key) != Table.end())
+        {
+            std::vector<int> path = Table[key];
+            
+            // 构建 parentVector
+            parentVector.clear();
+            parentVector.resize(NodeList::GetNNodes());
+            
+            for (uint32_t i = 0; i < NodeList::GetNNodes(); i++)
+            {
+                parentVector[i] = 0;
+            }
+            
+            // 设置 parent 关系
+            for (size_t i = 1; i < path.size(); i++)
+            {
+                int currentNode = path[i];
+                int parentNode = path[i-1];
+                parentVector[currentNode] = NodeList::GetNode(parentNode);
+            }
+            
+            BuildNixVector(parentVector, source, destNode, oif, nixVector);
+        }
+        else
+        {
+            NS_LOG_ERROR("No path found in Table");
+            return 0;
+        }
     }
     
-    file.close();
+    return nixVector;
 }
