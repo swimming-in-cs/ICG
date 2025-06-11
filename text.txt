@@ -1,68 +1,25 @@
 lin@lin-VirtualBox:~/Downloads/ns-allinone-3.35/ns-3.35$ ./waf --run="leo-lab6 --Task=2 --in="paths1.in" --out="task2.out""
 Waf: Entering directory `/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build'
-[ 622/2979] Compiling install-ns3-header: ns3/nix-vector-routing.h
-[1886/2979] Compiling src/nix-vector-routing/model/nix-vector-routing.cc
-[1887/2979] Compiling src/nix-vector-routing/helper/nix-vector-helper.cc
-In file included from ../src/nix-vector-routing/helper/nix-vector-helper.cc:26:
-../src/nix-vector-routing/helper/nix-vector-helper.cc: In instantiation of ‘ns3::NixVectorHelper<T>::NixVectorHelper(const ns3::NixVectorHelper<T>&) [with T = ns3::Ipv4RoutingHelper]’:
-../src/nix-vector-routing/helper/nix-vector-helper.cc:91:16:   required from here
-../src/nix-vector-routing/helper/nix-vector-helper.h:116:17: warning: ‘ns3::NixVectorHelper<ns3::Ipv4RoutingHelper>::m_agentFactory’ will be initialized after [-Wreorder]
-  116 |   ObjectFactory m_agentFactory; //!< Object factory
-      |                 ^~~~~~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.h:106:15: warning:   ‘std::string ns3::NixVectorHelper<ns3::Ipv4RoutingHelper>::m_pathFile’ [-Wreorder]
-  106 |   std::string m_pathFile;
-      |               ^~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.cc:46:1: warning:   when initialized here [-Wreorder]
-   46 | NixVectorHelper<T>::NixVectorHelper (const NixVectorHelper<T> &o)
-      | ^~~~~~~~~~~~~~~~~~
-In file included from ../src/nix-vector-routing/helper/nix-vector-helper.cc:26:
-../src/nix-vector-routing/helper/nix-vector-helper.cc: In instantiation of ‘ns3::NixVectorHelper<T>::NixVectorHelper(const ns3::NixVectorHelper<T>&) [with T = ns3::Ipv6RoutingHelper]’:
-../src/nix-vector-routing/helper/nix-vector-helper.cc:92:16:   required from here
-../src/nix-vector-routing/helper/nix-vector-helper.h:116:17: warning: ‘ns3::NixVectorHelper<ns3::Ipv6RoutingHelper>::m_agentFactory’ will be initialized after [-Wreorder]
-  116 |   ObjectFactory m_agentFactory; //!< Object factory
-      |                 ^~~~~~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.h:106:15: warning:   ‘std::string ns3::NixVectorHelper<ns3::Ipv6RoutingHelper>::m_pathFile’ [-Wreorder]
-  106 |   std::string m_pathFile;
-      |               ^~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.cc:46:1: warning:   when initialized here [-Wreorder]
-   46 | NixVectorHelper<T>::NixVectorHelper (const NixVectorHelper<T> &o)
-      | ^~~~~~~~~~~~~~~~~~
-
-[2697/2979] Compiling src/nix-vector-routing/examples/nix-double-wifi.cc
+[1974/2979] Compiling src/nix-vector-routing/model/nix-vector-routing.cc
+[2705/2979] Compiling contrib/leo/examples/leo-lab6.cc
 ../src/nix-vector-routing/model/nix-vector-routing.cc: In member function ‘ns3::Ptr<ns3::NixVector> ns3::NixVectorRouting<T>::GetNixVector(ns3::Ptr<ns3::Node>, ns3::NixVectorRouting<T>::IpAddress, ns3::Ptr<ns3::NetDevice>) const’:
-../src/nix-vector-routing/model/nix-vector-routing.cc:252:52: error: no match for ‘operator[]’ (operand types are ‘const std::map<std::pair<int, int>, std::vector<int> >’ and ‘std::pair<int, int>’)
-  252 |           std::vector<int> path = this->m_pathTable[key];
-      |                                                    ^
-In file included from /usr/include/c++/11/map:61,
-                 from ./ns3/log.h:27,
-                 from ../src/nix-vector-routing/model/nix-vector-routing.cc:29:
-/usr/include/c++/11/bits/stl_map.h:492:7: note: candidate: ‘std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](const key_type&) [with _Key = std::pair<int, int>; _Tp = std::vector<int>; _Compare = std::less<std::pair<int, int> >; _Alloc = std::allocator<std::pair<const std::pair<int, int>, std::vector<int> > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::vector<int>; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = std::pair<int, int>]’ (near match)
-  492 |       operator[](const key_type& __k)
-      |       ^~~~~~~~
-/usr/include/c++/11/bits/stl_map.h:492:7: note:   passing ‘const std::map<std::pair<int, int>, std::vector<int> >*’ as ‘this’ argument discards qualifiers
-/usr/include/c++/11/bits/stl_map.h:512:7: note: candidate: ‘std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type& std::map<_Key, _Tp, _Compare, _Alloc>::operator[](std::map<_Key, _Tp, _Compare, _Alloc>::key_type&&) [with _Key = std::pair<int, int>; _Tp = std::vector<int>; _Compare = std::less<std::pair<int, int> >; _Alloc = std::allocator<std::pair<const std::pair<int, int>, std::vector<int> > >; std::map<_Key, _Tp, _Compare, _Alloc>::mapped_type = std::vector<int>; std::map<_Key, _Tp, _Compare, _Alloc>::key_type = std::pair<int, int>]’ (near match)
-  512 |       operator[](key_type&& __k)
-      |       ^~~~~~~~
-/usr/include/c++/11/bits/stl_map.h:512:7: note:   conversion of argument 1 would be ill-formed:
-../src/nix-vector-routing/model/nix-vector-routing.cc: In instantiation of ‘ns3::Ptr<ns3::NixVector> ns3::NixVectorRouting<T>::GetNixVector(ns3::Ptr<ns3::Node>, ns3::NixVectorRouting<T>::IpAddress, ns3::Ptr<ns3::NetDevice>) const [with T = ns3::Ipv4RoutingProtocol; ns3::NixVectorRouting<T>::IpAddress = ns3::Ipv4Address]’:
-../src/nix-vector-routing/model/nix-vector-routing.cc:41:1:   required from here
-../src/nix-vector-routing/model/nix-vector-routing.cc:269:25: error: no matching function for call to ‘ns3::NixVectorRouting<ns3::Ipv4RoutingProtocol>::BuildNixVector(std::vector<ns3::Ptr<ns3::Node> >&, ns3::Ptr<ns3::Node>&, ns3::Ptr<ns3::Node>&, ns3::Ptr<ns3::NetDevice>&, ns3::Ptr<ns3::NixVector>&) const’
-  269 |           BuildNixVector(parentVector, source, destNode, oif, nixVector);
-      |           ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-../src/nix-vector-routing/model/nix-vector-routing.cc:351:1: note: candidate: ‘bool ns3::NixVectorRouting<T>::BuildNixVector(const std::vector<ns3::Ptr<ns3::Node> >&, uint32_t, uint32_t, ns3::Ptr<ns3::NixVector>) const [with T = ns3::Ipv4RoutingProtocol; uint32_t = unsigned int]’
-  351 | NixVectorRouting<T>::BuildNixVector (const std::vector< Ptr<Node> > & parentVector, uint32_t source, uint32_t dest, Ptr<NixVector> nixVector) const
-      | ^~~~~~~~~~~~~~~~~~~
-../src/nix-vector-routing/model/nix-vector-routing.cc:351:1: note:   candidate expects 4 arguments, 5 provided
-../src/nix-vector-routing/model/nix-vector-routing.cc: In instantiation of ‘ns3::Ptr<ns3::NixVector> ns3::NixVectorRouting<T>::GetNixVector(ns3::Ptr<ns3::Node>, ns3::NixVectorRouting<T>::IpAddress, ns3::Ptr<ns3::NetDevice>) const [with T = ns3::Ipv6RoutingProtocol; ns3::NixVectorRouting<T>::IpAddress = ns3::Ipv6Address]’:
-../src/nix-vector-routing/model/nix-vector-routing.cc:42:1:   required from here
-../src/nix-vector-routing/model/nix-vector-routing.cc:269:25: error: no matching function for call to ‘ns3::NixVectorRouting<ns3::Ipv6RoutingProtocol>::BuildNixVector(std::vector<ns3::Ptr<ns3::Node> >&, ns3::Ptr<ns3::Node>&, ns3::Ptr<ns3::Node>&, ns3::Ptr<ns3::NetDevice>&, ns3::Ptr<ns3::NixVector>&) const’
-  269 |           BuildNixVector(parentVector, source, destNode, oif, nixVector);
-      |           ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-../src/nix-vector-routing/model/nix-vector-routing.cc:351:1: note: candidate: ‘bool ns3::NixVectorRouting<T>::BuildNixVector(const std::vector<ns3::Ptr<ns3::Node> >&, uint32_t, uint32_t, ns3::Ptr<ns3::NixVector>) const [with T = ns3::Ipv6RoutingProtocol; uint32_t = unsigned int]’
-  351 | NixVectorRouting<T>::BuildNixVector (const std::vector< Ptr<Node> > & parentVector, uint32_t source, uint32_t dest, Ptr<NixVector> nixVector) const
-      | ^~~~~~~~~~~~~~~~~~~
-../src/nix-vector-routing/model/nix-vector-routing.cc:351:1: note:   candidate expects 4 arguments, 5 provided
+../src/nix-vector-routing/model/nix-vector-routing.cc:277:34: error: ‘path’ was not declared in this scope
+  277 |           for (size_t i = 1; i < path.size(); i++)
+      |                                  ^~~~
+
+../contrib/leo/examples/leo-lab6.cc: In function ‘void SendPacket(int, int)’:
+../contrib/leo/examples/leo-lab6.cc:65:15: warning: comparison of integer expressions of different signedness: ‘int’ and ‘uint32_t’ {aka ‘unsigned int’} [-Wsign-compare]
+   65 |     if (srcId < satellites.GetN()) {
+      |         ~~~~~~^~~~~~~~~~~~~~~~~~~
+../contrib/leo/examples/leo-lab6.cc:71:15: warning: comparison of integer expressions of different signedness: ‘int’ and ‘uint32_t’ {aka ‘unsigned int’} [-Wsign-compare]
+   71 |     if (dstId < satellites.GetN()) {
+      |         ~~~~~~^~~~~~~~~~~~~~~~~~~
+../contrib/leo/examples/leo-lab6.cc: In function ‘int main(int, char**)’:
+../contrib/leo/examples/leo-lab6.cc:222:32: error: ‘sinkApps’ was not declared in this scope
+  222 |         for (size_t i = 0; i < sinkApps.size() && i < sdPairs.size(); i++) {
+      |                                ^~~~~~~~
 
 Waf: Leaving directory `/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build'
 Build failed
  -> task in 'ns3-nix-vector-routing' failed with exit status 1 (run with -v to display more information)
+ -> task in 'leo-lab6' failed with exit status 1 (run with -v to display more information)
