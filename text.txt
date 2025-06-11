@@ -1,45 +1,33 @@
-lin@lin-VirtualBox:~/Downloads/ns-allinone-3.35/ns-3.35$ ./waf --run="leo-lab6 --Task=2 --in="paths1.in" --out="task2.out""
-Waf: Entering directory `/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build'
-[2723/2979] Compiling contrib/leo/examples/leo-lab6.cc
-../contrib/leo/examples/leo-lab6.cc: In function ‘void SendPacket(int, int, ns3::ApplicationContainer&)’:
-../contrib/leo/examples/leo-lab6.cc:65:15: warning: comparison of integer expressions of different signedness: ‘int’ and ‘uint32_t’ {aka ‘unsigned int’} [-Wsign-compare]
-   65 |     if (srcId < satellites.GetN()) {
-      |         ~~~~~~^~~~~~~~~~~~~~~~~~~
-../contrib/leo/examples/leo-lab6.cc:71:15: warning: comparison of integer expressions of different signedness: ‘int’ and ‘uint32_t’ {aka ‘unsigned int’} [-Wsign-compare]
-   71 |     if (dstId < satellites.GetN()) {
-      |         ~~~~~~^~~~~~~~~~~~~~~~~~~
-
-[2938/2979] Linking build/contrib/leo/examples/ns3.35-leo-lab6-debug
 Waf: Leaving directory `/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build'
 Build commands will be stored in build/compile_commands.json
-'build' finished successfully (2.844s)
+'build' finished successfully (2.716s)
 terminate called after throwing an instance of 'std::out_of_range'
   what():  vector::_M_range_check: __n (which is 38) >= this->size() (which is 0)
 
-ns3.35-leo-lab6-debug:4246 terminated with signal 6 at PC=79add22969fc SP=7ffe1445a080.  Backtrace:
-/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x12c)[0x79add22969fc]
-/lib/x86_64-linux-gnu/libc.so.6(raise+0x16)[0x79add2242476]
-/lib/x86_64-linux-gnu/libc.so.6(abort+0xd3)[0x79add22287f3]
-/lib/x86_64-linux-gnu/libstdc++.so.6(+0xa2b9e)[0x79add26a2b9e]
-/lib/x86_64-linux-gnu/libstdc++.so.6(+0xae20c)[0x79add26ae20c]
-/lib/x86_64-linux-gnu/libstdc++.so.6(+0xae277)[0x79add26ae277]
-/lib/x86_64-linux-gnu/libstdc++.so.6(+0xae4d8)[0x79add26ae4d8]
-/lib/x86_64-linux-gnu/libstdc++.so.6(+0xa54cd)[0x79add26a54cd]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNKSt6vectorIN3ns33PtrINS0_4NodeEEESaIS3_EE14_M_range_checkEm+0x55)[0x79add7bd0485]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNKSt6vectorIN3ns33PtrINS0_4NodeEEESaIS3_EE2atEm+0x27)[0x79add7bca12b]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNK3ns316NixVectorRoutingINS_19Ipv4RoutingProtocolEE14BuildNixVectorERKSt6vectorINS_3PtrINS_4NodeEEESaIS6_EEjjNS4_INS_9NixVectorEEE+0x28e)[0x79add7ba98bc]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNK3ns316NixVectorRoutingINS_19Ipv4RoutingProtocolEE12GetNixVectorENS_3PtrINS_4NodeEEENS_11Ipv4AddressENS3_INS_9NetDeviceEEE+0x8bd)[0x79add7ba69f7]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZN3ns316NixVectorRoutingINS_19Ipv4RoutingProtocolEE11RouteOutputENS_3PtrINS_6PacketEEERKNS_10Ipv4HeaderENS3_INS_9NetDeviceEEERNS_6Socket11SocketErrnoE+0x734)[0x79add7baeeb2]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-internet-debug.so(_ZN3ns313TcpSocketBase13SetupEndpointEv+0x60d)[0x79add75ccfb1]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-internet-debug.so(_ZN3ns313TcpSocketBase7ConnectERKNS_7AddressE+0x5fd)[0x79add75ab0a1]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-applications-debug.so(_ZN3ns319BulkSendApplication16StartApplicationEv+0x828)[0x79add810a1f2]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-network-debug.so(_ZZN3ns39MakeEventIMNS_11ApplicationEFvvEPS1_EEPNS_9EventImplET_T0_EN16EventMemberImpl06NotifyEv+0x6d)[0x79add575b9bb]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns39EventImpl6InvokeEv+0x1b7)[0x79add535c4b1]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns320DefaultSimulatorImpl15ProcessOneEventEv+0x3e5)[0x79add536200f]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns320DefaultSimulatorImpl3RunEv+0x1c3)[0x79add5362409]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns39Simulator3RunEv+0x158)[0x79add535d394]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/contrib/leo/examples/ns3.35-leo-lab6-debug(+0xa8a7)[0x64c19689d8a7]
-/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x79add2229d90]
-/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x79add2229e40]
-/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/contrib/leo/examples/ns3.35-leo-lab6-debug(+0x7595)[0x64c19689a595]
+ns3.35-leo-lab6-debug:4396 terminated with signal 6 at PC=7358e5a969fc SP=7ffc8c3a0cd0.  Backtrace:
+/lib/x86_64-linux-gnu/libc.so.6(pthread_kill+0x12c)[0x7358e5a969fc]
+/lib/x86_64-linux-gnu/libc.so.6(raise+0x16)[0x7358e5a42476]
+/lib/x86_64-linux-gnu/libc.so.6(abort+0xd3)[0x7358e5a287f3]
+/lib/x86_64-linux-gnu/libstdc++.so.6(+0xa2b9e)[0x7358e5ea2b9e]
+/lib/x86_64-linux-gnu/libstdc++.so.6(+0xae20c)[0x7358e5eae20c]
+/lib/x86_64-linux-gnu/libstdc++.so.6(+0xae277)[0x7358e5eae277]
+/lib/x86_64-linux-gnu/libstdc++.so.6(+0xae4d8)[0x7358e5eae4d8]
+/lib/x86_64-linux-gnu/libstdc++.so.6(+0xa54cd)[0x7358e5ea54cd]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNKSt6vectorIN3ns33PtrINS0_4NodeEEESaIS3_EE14_M_range_checkEm+0x55)[0x7358eb5d0485]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNKSt6vectorIN3ns33PtrINS0_4NodeEEESaIS3_EE2atEm+0x27)[0x7358eb5ca12b]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNK3ns316NixVectorRoutingINS_19Ipv4RoutingProtocolEE14BuildNixVectorERKSt6vectorINS_3PtrINS_4NodeEEESaIS6_EEjjNS4_INS_9NixVectorEEE+0x28e)[0x7358eb5a98bc]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZNK3ns316NixVectorRoutingINS_19Ipv4RoutingProtocolEE12GetNixVectorENS_3PtrINS_4NodeEEENS_11Ipv4AddressENS3_INS_9NetDeviceEEE+0x8bd)[0x7358eb5a69f7]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-nix-vector-routing-debug.so(_ZN3ns316NixVectorRoutingINS_19Ipv4RoutingProtocolEE11RouteOutputENS_3PtrINS_6PacketEEERKNS_10Ipv4HeaderENS3_INS_9NetDeviceEEERNS_6Socket11SocketErrnoE+0x734)[0x7358eb5aeeb2]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-internet-debug.so(_ZN3ns313TcpSocketBase13SetupEndpointEv+0x60d)[0x7358eafccfb1]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-internet-debug.so(_ZN3ns313TcpSocketBase7ConnectERKNS_7AddressE+0x5fd)[0x7358eafab0a1]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-applications-debug.so(_ZN3ns319BulkSendApplication16StartApplicationEv+0x828)[0x7358ebb0a1f2]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-network-debug.so(_ZZN3ns39MakeEventIMNS_11ApplicationEFvvEPS1_EEPNS_9EventImplET_T0_EN16EventMemberImpl06NotifyEv+0x6d)[0x7358e915b9bb]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns39EventImpl6InvokeEv+0x1b7)[0x7358e8b5c4b1]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns320DefaultSimulatorImpl15ProcessOneEventEv+0x3e5)[0x7358e8b6200f]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns320DefaultSimulatorImpl3RunEv+0x1c3)[0x7358e8b62409]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/lib/libns3.35-core-debug.so(_ZN3ns39Simulator3RunEv+0x158)[0x7358e8b5d394]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/contrib/leo/examples/ns3.35-leo-lab6-debug(+0xa94b)[0x638e9d8f194b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)[0x7358e5a29d90]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0x80)[0x7358e5a29e40]
+/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/contrib/leo/examples/ns3.35-leo-lab6-debug(+0x75b5)[0x638e9d8ee5b5]
 Command ['/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build/contrib/leo/examples/ns3.35-leo-lab6-debug', '--Task=2', '--in=paths1.in', '--out=task2.out'] exited with code 1
