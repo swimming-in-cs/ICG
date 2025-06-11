@@ -1,55 +1,66 @@
-lin@lin-VirtualBox:~/Downloads/ns-allinone-3.35/ns-3.35$ ./waf --run="leo-lab6 --Task=2 --in="paths1.in" --out="task2.out""
-Waf: Entering directory `/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build'
-[1961/2979] Compiling src/nix-vector-routing/helper/nix-vector-helper.cc
-[1962/2979] Compiling src/nix-vector-routing/model/nix-vector-routing.cc
-In file included from ../src/nix-vector-routing/helper/nix-vector-helper.cc:26:
-../src/nix-vector-routing/helper/nix-vector-helper.cc: In instantiation of ‘ns3::NixVectorHelper<T>::NixVectorHelper(const ns3::NixVectorHelper<T>&) [with T = ns3::Ipv4RoutingHelper]’:
-../src/nix-vector-routing/helper/nix-vector-helper.cc:94:16:   required from here
-../src/nix-vector-routing/helper/nix-vector-helper.h:116:17: warning: ‘ns3::NixVectorHelper<ns3::Ipv4RoutingHelper>::m_agentFactory’ will be initialized after [-Wreorder]
-  116 |   ObjectFactory m_agentFactory; //!< Object factory
-      |                 ^~~~~~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.h:106:15: warning:   ‘std::string ns3::NixVectorHelper<ns3::Ipv4RoutingHelper>::m_pathFile’ [-Wreorder]
-  106 |   std::string m_pathFile;
-      |               ^~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.cc:46:1: warning:   when initialized here [-Wreorder]
-   46 | NixVectorHelper<T>::NixVectorHelper (const NixVectorHelper<T> &o)
-      | ^~~~~~~~~~~~~~~~~~
-In file included from ../src/nix-vector-routing/helper/nix-vector-helper.cc:26:
-../src/nix-vector-routing/helper/nix-vector-helper.cc: In instantiation of ‘ns3::NixVectorHelper<T>::NixVectorHelper(const ns3::NixVectorHelper<T>&) [with T = ns3::Ipv6RoutingHelper]’:
-../src/nix-vector-routing/helper/nix-vector-helper.cc:95:16:   required from here
-../src/nix-vector-routing/helper/nix-vector-helper.h:116:17: warning: ‘ns3::NixVectorHelper<ns3::Ipv6RoutingHelper>::m_agentFactory’ will be initialized after [-Wreorder]
-  116 |   ObjectFactory m_agentFactory; //!< Object factory
-      |                 ^~~~~~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.h:106:15: warning:   ‘std::string ns3::NixVectorHelper<ns3::Ipv6RoutingHelper>::m_pathFile’ [-Wreorder]
-  106 |   std::string m_pathFile;
-      |               ^~~~~~~~~~
-../src/nix-vector-routing/helper/nix-vector-helper.cc:46:1: warning:   when initialized here [-Wreorder]
-   46 | NixVectorHelper<T>::NixVectorHelper (const NixVectorHelper<T> &o)
-      | ^~~~~~~~~~~~~~~~~~
+template <typename T>
+void
+NixVectorRouting<T>::SetPaths(std::string pathFile)
+{
+  std::ifstream infile(pathFile);
+  if (!infile.is_open())
+  {
+    NS_LOG_ERROR("Failed to open path file: " << pathFile);
+    return;
+  }
 
-../src/nix-vector-routing/model/nix-vector-routing.cc: In instantiation of ‘ns3::Ptr<ns3::NixVector> ns3::NixVectorRouting<T>::GetNixVector(ns3::Ptr<ns3::Node>, ns3::NixVectorRouting<T>::IpAddress, ns3::Ptr<ns3::NetDevice>) const [with T = ns3::Ipv4RoutingProtocol; ns3::NixVectorRouting<T>::IpAddress = ns3::Ipv4Address]’:
-../src/nix-vector-routing/model/nix-vector-routing.cc:41:1:   required from here
-../src/nix-vector-routing/model/nix-vector-routing.cc:263:54: error: invalid use of non-static member function ‘uint32_t ns3::Node::GetId() const’
-  263 |             if (BuildNixVector(parentVector, source->GetId, destNode->GetId, nixVector))
-      |                                              ~~~~~~~~^~~~~
-In file included from ./ns3/node-container.h:25,
-                 from ../src/nix-vector-routing/model/nix-vector-routing.h:30,
-                 from ../src/nix-vector-routing/model/nix-vector-routing.cc:35:
-./ns3/node.h:79:12: note: declared here
-   79 |   uint32_t GetId (void) const;
-      |            ^~~~~
-../src/nix-vector-routing/model/nix-vector-routing.cc: In instantiation of ‘ns3::Ptr<ns3::NixVector> ns3::NixVectorRouting<T>::GetNixVector(ns3::Ptr<ns3::Node>, ns3::NixVectorRouting<T>::IpAddress, ns3::Ptr<ns3::NetDevice>) const [with T = ns3::Ipv6RoutingProtocol; ns3::NixVectorRouting<T>::IpAddress = ns3::Ipv6Address]’:
-../src/nix-vector-routing/model/nix-vector-routing.cc:42:1:   required from here
-../src/nix-vector-routing/model/nix-vector-routing.cc:263:54: error: invalid use of non-static member function ‘uint32_t ns3::Node::GetId() const’
-  263 |             if (BuildNixVector(parentVector, source->GetId, destNode->GetId, nixVector))
-      |                                              ~~~~~~~~^~~~~
-In file included from ./ns3/node-container.h:25,
-                 from ../src/nix-vector-routing/model/nix-vector-routing.h:30,
-                 from ../src/nix-vector-routing/model/nix-vector-routing.cc:35:
-./ns3/node.h:79:12: note: declared here
-   79 |   uint32_t GetId (void) const;
-      |            ^~~~~
+  std::string line;
+  int lineNum = 0;
+  while (std::getline(infile, line))
+  {
+    std::istringstream iss(line);
+    int srcId, dstId, pathLen;
 
-Waf: Leaving directory `/home/lin/Downloads/ns-allinone-3.35/ns-3.35/build'
-Build failed
- -> task in 'ns3-nix-vector-routing' failed with exit status 1 (run with -v to display more information)
+    if (!(iss >> srcId >> dstId >> pathLen))
+    {
+      NS_LOG_WARN("Invalid format at line " << lineNum << ": " << line);
+      continue;
+    }
+
+    std::vector<int> path;
+    int nodeId;
+    for (int i = 0; i < pathLen; ++i)
+    {
+      if (!(iss >> nodeId))
+      {
+        NS_LOG_WARN("Path too short at line " << lineNum << ": " << line);
+        break;
+      }
+      path.push_back(nodeId);
+    }
+
+    if (path.size() != static_cast<size_t>(pathLen))
+    {
+      NS_LOG_WARN("Path length mismatch at line " << lineNum << ": expected " << pathLen << ", got " << path.size());
+      continue;
+    }
+
+    m_table[{srcId, dstId}] = path;
+
+    // ✅ 開啟這個輸出可追蹤路徑設定情況
+    NS_LOG_INFO("Inserted path from " << srcId << " to " << dstId << " (len=" << pathLen << "): " << pathToString(path));
+
+    ++lineNum;
+  }
+
+  NS_LOG_INFO("Total custom paths inserted: " << m_table.size());
+}
+
+// 輔助函式，將 vector<int> 轉成字串
+std::string
+pathToString(const std::vector<int> &path)
+{
+  std::ostringstream oss;
+  for (size_t i = 0; i < path.size(); ++i)
+  {
+    oss << path[i];
+    if (i != path.size() - 1)
+      oss << " -> ";
+  }
+  return oss.str();
+}
